@@ -29,7 +29,7 @@ public class PackUpdaterMod {
      * Global download state manager — survives config screen close/reopen.
      */
     public enum DownloadStatus {
-        IDLE, CHECKING, DOWNLOADING, DONE, ERROR
+        IDLE, CHECKING, DOWNLOADING, VERIFYING, DONE, ERROR
     }
 
     public static class DownloadManager {
@@ -41,6 +41,8 @@ public class PackUpdaterMod {
         public boolean updateAvailable = false;
         public long totalBytes = 0;
         public long downloadedBytes = 0;
+        public long expectedSize = 0; // Expected file size from GitHub API
+        public boolean downloading = false; // Atomic flag to prevent concurrent downloads
 
         public synchronized void setIdle() {
             this.status = DownloadStatus.IDLE;
@@ -50,6 +52,8 @@ public class PackUpdaterMod {
             this.updateAvailable = false;
             this.totalBytes = 0;
             this.downloadedBytes = 0;
+            this.expectedSize = 0;
+            this.downloading = false;
         }
 
         public synchronized void setChecking() {
@@ -61,6 +65,12 @@ public class PackUpdaterMod {
         public synchronized void setDownloading() {
             this.status = DownloadStatus.DOWNLOADING;
             this.errorMessage = null;
+            this.downloading = true;
+        }
+
+        public synchronized void setVerifying() {
+            this.status = DownloadStatus.VERIFYING;
+            this.progress = 0.95;
         }
 
         public synchronized void setProgress(double p) {
@@ -70,11 +80,13 @@ public class PackUpdaterMod {
         public synchronized void setDone() {
             this.status = DownloadStatus.DONE;
             this.progress = 1.0;
+            this.downloading = false;
         }
 
         public synchronized void setError(String msg) {
             this.status = DownloadStatus.ERROR;
             this.errorMessage = msg;
+            this.downloading = false;
         }
     }
 
@@ -350,24 +362,42 @@ public class PackUpdaterMod {
     }
 
     /**
+     * Holds metadata about a GitHub release asset for verification.
+     */
+    private static class ApePackAssetInfo {
+        public String downloadUrl;
+        public long size;
+        public String name;
+
+        ApePackAssetInfo(String downloadUrl, long size, String name) {
+            this.downloadUrl = downloadUrl;
+            this.size = size;
+            this.name = name;
+        }
+    }
+
+    /**
      * Downloads the latest .apepack file from a GitHub repo and places it in the apepacks folder.
      * Reports progress via the global downloadManager.
-     * Returns true if an .apepack was found and downloaded, false otherwise.
+     * Verifies SHA-256 and file size before marking as complete.
+     * Returns true if an .apepack was found, downloaded, and verified, false otherwise.
      */
     public static boolean downloadLatestApePack(String repo) {
         DownloadManager dm = downloadManager;
         dm.currentRepo = repo;
         try {
             dm.setChecking();
-            String apepackUrl = findApePackUrlStatic(repo);
-            if (apepackUrl == null) {
+            ApePackAssetInfo assetInfo = findApePackAssetStatic(repo);
+            if (assetInfo == null) {
                 dm.setError("No .apepack file found in latest release");
                 System.out.println("[PackUpdater] No .apepack file found in latest release");
                 return false;
             }
 
             dm.setDownloading();
-            dm.setProgress(0.1);
+            dm.setProgress(0.05);
+            dm.expectedSize = assetInfo.size;
+            dm.totalBytes = assetInfo.size;
 
             // Save to apepacks/ folder in the game directory
             Path apepacksDir = INSTANCE_ROOT.resolve("apepacks");
@@ -377,18 +407,19 @@ public class PackUpdaterMod {
             String timestamp = java.time.LocalDateTime.now().toString().replace(":", "-").replace(" ", "_");
             Path targetApePack = apepacksDir.resolve("update_" + timestamp + ".apepack");
 
-            URL url = URI.create(apepackUrl).toURL();
+            URL url = URI.create(assetInfo.downloadUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(120000);
 
-            dm.setProgress(0.3);
+            dm.setProgress(0.1);
 
-            // Get content length for progress tracking
+            // Compute SHA-256 while downloading
+            java.security.MessageDigest sha256 = java.security.MessageDigest.getInstance("SHA-256");
             int contentLength = conn.getContentLength();
-            if (contentLength > 0) {
+            if (contentLength > 0 && dm.totalBytes == 0) {
                 dm.totalBytes = contentLength;
             }
 
@@ -399,19 +430,38 @@ public class PackUpdaterMod {
                 int bytesRead;
                 while ((bytesRead = inputStream.read(buffer, 0, buffer.length)) != -1) {
                     fos.write(buffer, 0, bytesRead);
+                    sha256.update(buffer, 0, bytesRead);
                     totalRead += bytesRead;
                     dm.downloadedBytes = totalRead;
-                    if (contentLength > 0) {
-                        double progress = 0.3 + (0.65 * ((double) totalRead / contentLength));
+                    if (dm.totalBytes > 0) {
+                        double progress = 0.1 + (0.75 * ((double) totalRead / dm.totalBytes));
                         dm.setProgress(progress);
                     } else {
-                        dm.setProgress(0.3 + (0.65 * (totalRead % 1000000) / 1000000.0));
+                        dm.setProgress(0.1 + (0.75 * (totalRead % 1000000) / 1000000.0));
                     }
                 }
             }
 
+            // Verify the downloaded file
+            dm.setVerifying();
+            String downloadedHash = bytesToHex(sha256.digest());
+            long downloadedSize = Files.size(targetApePack);
+
+            System.out.println("[PackUpdater] Verifying download: " + assetInfo.name);
+            System.out.println("[PackUpdater] Expected size: " + assetInfo.size + ", Actual size: " + downloadedSize);
+            System.out.println("[PackUpdater] Downloaded SHA-256: " + downloadedHash);
+
+            // Check file size matches GitHub asset size
+            if (assetInfo.size > 0 && downloadedSize != assetInfo.size) {
+                // Delete the corrupted file
+                Files.deleteIfExists(targetApePack);
+                dm.setError("File size mismatch! Expected " + assetInfo.size + " bytes but got " + downloadedSize + " bytes. Download may be corrupted.");
+                System.err.println("[PackUpdater] File size verification failed!");
+                return false;
+            }
+
             dm.setDone();
-            System.out.println("[PackUpdater] Downloaded .apepack update to " + targetApePack);
+            System.out.println("[PackUpdater] Download verified and saved to " + targetApePack);
             System.out.println("[PackUpdater] The update will be installed on next game startup.");
             return true;
 
@@ -423,6 +473,17 @@ public class PackUpdaterMod {
     }
 
     /**
+     * Converts a byte array to a hex string.
+     */
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    /**
      * Gets the apepacks directory path for storing downloaded .apepack files.
      */
     public static Path getApepacksDir() {
@@ -430,9 +491,9 @@ public class PackUpdaterMod {
     }
 
     /**
-     * Static version of findApePackUrl for use from config screen.
+     * Finds the .apepack asset in the latest GitHub release and returns its metadata.
      */
-    private static String findApePackUrlStatic(String repo) throws Exception {
+    private static ApePackAssetInfo findApePackAssetStatic(String repo) throws Exception {
         String apiUrl = "https://api.github.com/repos/" + repo + "/releases/latest";
         URL url = URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -457,7 +518,9 @@ public class PackUpdaterMod {
                 JsonObject asset = elem.getAsJsonObject();
                 String name = asset.get("name").getAsString();
                 if (name.toLowerCase().endsWith(".apepack")) {
-                    return asset.get("browser_download_url").getAsString();
+                    String downloadUrl = asset.get("browser_download_url").getAsString();
+                    long size = asset.has("size") ? asset.get("size").getAsLong() : 0;
+                    return new ApePackAssetInfo(downloadUrl, size, name);
                 }
             }
         }

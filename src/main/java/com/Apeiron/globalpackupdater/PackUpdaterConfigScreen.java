@@ -225,7 +225,9 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Reset download manager if it was in a transient state from a previous session
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        if (dm.status == PackUpdaterMod.DownloadStatus.CHECKING || dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
+        if (dm.status == PackUpdaterMod.DownloadStatus.CHECKING 
+                || dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING
+                || dm.status == PackUpdaterMod.DownloadStatus.VERIFYING) {
             dm.setIdle();
         }
 
@@ -364,9 +366,32 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     /**
+     * Blocks all interactive buttons while a download or verification is in progress.
+     */
+    private void blockButtons(boolean block) {
+        if (this.checkButton != null) this.checkButton.active = !block;
+        if (this.generateButton != null) this.generateButton.active = !block;
+        if (this.browseButton != null) this.browseButton.active = !block;
+        if (this.channelButton != null) this.channelButton.active = !block;
+        if (this.urlField != null) this.urlField.setEditable(!block);
+        if (this.tokenField != null) this.tokenField.setEditable(!block);
+        if (this.packNameField != null) this.packNameField.setEditable(!block);
+        if (this.packVersionField != null) this.packVersionField.setEditable(!block);
+    }
+
+    /**
      * Handles the "Check for Update" button click — uses global DownloadManager.
      */
     private void handleCheckForUpdate() {
+        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
+
+        // Prevent concurrent downloads
+        if (dm.downloading) {
+            this.statusText = Component.literal("Download already in progress...");
+            showToast("⚠️ Download already in progress");
+            return;
+        }
+
         String input = this.urlField.getValue().trim();
         if (input.isEmpty()) {
             this.statusText = Component.literal("Please enter a GitHub repo.");
@@ -388,13 +413,8 @@ public class PackUpdaterConfigScreen extends Screen {
         // Save config so the GitHub token is available for API calls
         ConfigManager.saveConfig();
 
-        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-
-        // If a download is already in progress, don't start another
-        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
-            this.statusText = Component.literal("Download already in progress...");
-            return;
-        }
+        // Block all buttons during check
+        blockButtons(true);
 
         this.statusText = Component.literal("Checking for updates...");
         this.checkButton.active = false;
@@ -406,9 +426,6 @@ public class PackUpdaterConfigScreen extends Screen {
             UpdateCheckResult result = checkForUpdates(repo, ConfigManager.channel);
 
             Minecraft.getInstance().execute(() -> {
-                this.checkButton.active = true;
-                this.checkButton.setMessage(Component.literal("Check for Update"));
-
                 if (result.success) {
                     dm.latestVersion = result.version;
                     dm.updateAvailable = result.updateAvailable;
@@ -428,15 +445,29 @@ public class PackUpdaterConfigScreen extends Screen {
                                 Component.literal("Download Update"),
                                 b -> handleDownloadUpdate(repo)
                         ).bounds(btnX, btnY, btnW, btnH).build());
+                        // Unblock buttons so user can click Download
+                        blockButtons(false);
                     } else {
                         this.statusText = Component.literal("You're up to date! " + result.message);
                         showToast("✅ You're up to date!");
                         dm.setIdle();
+                        // Restore check button
+                        int btnX = this.checkButton.getX();
+                        int btnY = this.checkButton.getY();
+                        int btnW = this.checkButton.getWidth();
+                        int btnH = this.checkButton.getHeight();
+                        this.removeWidget(checkButton);
+                        this.checkButton = this.addRenderableWidget(Button.builder(
+                                Component.literal("Check for Update"),
+                                b -> handleCheckForUpdate()
+                        ).bounds(btnX, btnY, btnW, btnH).build());
+                        blockButtons(false);
                     }
                 } else {
                     this.statusText = Component.literal(result.message);
                     showToast("❌ " + result.message);
                     dm.setError(result.message);
+                    blockButtons(false);
                 }
             });
         }, "PackUpdater-Check");
@@ -450,26 +481,74 @@ public class PackUpdaterConfigScreen extends Screen {
     private void handleDownloadUpdate(String repo) {
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
 
+        // Prevent concurrent downloads
+        if (dm.downloading) {
+            this.statusText = Component.literal("Download already in progress...");
+            showToast("⚠️ Download already in progress");
+            return;
+        }
+
         this.statusText = Component.literal("Downloading update...");
-        this.checkButton.active = false;
-        this.checkButton.setMessage(Component.literal("Downloading..."));
+        // Block ALL buttons during download and verification
+        blockButtons(true);
 
         Thread downloadThread = new Thread(() -> {
             boolean apePackDownloaded = PackUpdaterMod.downloadLatestApePack(repo);
 
             Minecraft.getInstance().execute(() -> {
-                this.checkButton.active = true;
-                this.checkButton.setMessage(Component.literal("Check for Update"));
-
                 if (apePackDownloaded) {
-                    this.statusText = Component.literal("Update saved to apepacks/! Restart to install.");
-                    showToast("✅ Update downloaded! Restart to install.");
-                    dm.setDone();
+                    this.statusText = Component.literal("✅ Update downloaded & verified! Saved to apepacks/ — restart to install.");
+                    showToast("✅ Update downloaded and verified! Restart to install.");
+                    // Keep dm.status as DONE (already set by downloadLatestApePack)
+                    // Show completion status for a few seconds, then reset
+                    final int[] countdown = {180}; // 3 seconds at 60fps
+                    final PackUpdaterConfigScreen[] self = {this};
+                    final Runnable[] resetTask = {null};
+                    resetTask[0] = () -> {
+                        if (countdown[0] > 0) {
+                            countdown[0]--;
+                            if (countdown[0] == 0) {
+                                // Reset to idle state after showing completion
+                                dm.setIdle();
+                                if (self[0] != null) {
+                                    self[0].blockButtons(false);
+                                    // Restore check button
+                                    if (self[0].checkButton != null) {
+                                        int btnX = self[0].checkButton.getX();
+                                        int btnY = self[0].checkButton.getY();
+                                        int btnW = self[0].checkButton.getWidth();
+                                        int btnH = self[0].checkButton.getHeight();
+                                        self[0].removeWidget(self[0].checkButton);
+                                        self[0].checkButton = self[0].addRenderableWidget(Button.builder(
+                                                Component.literal("Check for Update"),
+                                                b -> self[0].handleCheckForUpdate()
+                                        ).bounds(btnX, btnY, btnW, btnH).build());
+                                    }
+                                }
+                            } else {
+                                Minecraft.getInstance().execute(resetTask[0]);
+                            }
+                        }
+                    };
+                    Minecraft.getInstance().execute(resetTask[0]);
                 } else {
                     String errorMsg = dm.errorMessage != null ? dm.errorMessage : "Download failed";
                     this.statusText = Component.literal("Download failed: " + errorMsg);
-                    showToast("❌ Download failed");
-                    dm.setError(errorMsg);
+                    showToast("❌ Download failed: " + errorMsg);
+                    // dm.setError already called by downloadLatestApePack
+                    blockButtons(false);
+                    // Restore check button
+                    if (this.checkButton != null) {
+                        int btnX = this.checkButton.getX();
+                        int btnY = this.checkButton.getY();
+                        int btnW = this.checkButton.getWidth();
+                        int btnH = this.checkButton.getHeight();
+                        this.removeWidget(checkButton);
+                        this.checkButton = this.addRenderableWidget(Button.builder(
+                                Component.literal("Check for Update"),
+                                b -> handleCheckForUpdate()
+                        ).bounds(btnX, btnY, btnW, btnH).build());
+                    }
                 }
             });
         }, "PackUpdater-Download");
@@ -595,13 +674,45 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // ===================== DOWNLOAD PROGRESS =====================
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING || dm.status == PackUpdaterMod.DownloadStatus.CHECKING) {
+        boolean showProgress = dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING
+                || dm.status == PackUpdaterMod.DownloadStatus.CHECKING
+                || dm.status == PackUpdaterMod.DownloadStatus.VERIFYING
+                || dm.status == PackUpdaterMod.DownloadStatus.DONE
+                || dm.status == PackUpdaterMod.DownloadStatus.ERROR;
+        if (showProgress) {
             int progressPanelY = importPanelY + importPanelHeight + 10;
             int progressPanelHeight = 60;
             drawPanel(guiGraphics, panelX, progressPanelY, panelWidth, progressPanelHeight);
 
-            String statusText = dm.status == PackUpdaterMod.DownloadStatus.CHECKING ? "Checking..." : "Downloading...";
-            guiGraphics.centeredText(this.font, "⬇ " + statusText, this.width / 2, progressPanelY + 12, 0x88CCFF);
+            String statusText;
+            int statusColor = 0x88CCFF;
+            switch (dm.status) {
+                case CHECKING -> {
+                    statusText = "🔍 Checking for updates...";
+                    statusColor = 0x88CCFF;
+                }
+                case DOWNLOADING -> {
+                    statusText = "⬇ Downloading update...";
+                    statusColor = 0x88CCFF;
+                }
+                case VERIFYING -> {
+                    statusText = "🔐 Verifying download integrity...";
+                    statusColor = 0xFFAA00;
+                }
+                case DONE -> {
+                    statusText = "✅ Download complete!";
+                    statusColor = 0x55FF55;
+                }
+                case ERROR -> {
+                    statusText = "❌ Download failed!";
+                    statusColor = 0xFF5555;
+                }
+                default -> {
+                    statusText = "Idle";
+                    statusColor = 0x888888;
+                }
+            }
+            guiGraphics.centeredText(this.font, statusText, this.width / 2, progressPanelY + 12, statusColor);
 
             // Progress bar background
             int barX = panelX + 20;
@@ -610,10 +721,17 @@ public class PackUpdaterConfigScreen extends Screen {
             int barHeight = 14;
             guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0x404040);
 
-            // Progress bar fill
+            // Progress bar fill (color changes based on status)
             int fillWidth = (int) (barWidth * dm.progress);
             if (fillWidth > 0) {
-                guiGraphics.fill(barX, barY, barX + fillWidth, barY + barHeight, 0x33AA33);
+                int fillColor;
+                switch (dm.status) {
+                    case DONE -> fillColor = 0x55FF55;
+                    case ERROR -> fillColor = 0xFF5555;
+                    case VERIFYING -> fillColor = 0xFFAA00;
+                    default -> fillColor = 0x33AA33;
+                }
+                guiGraphics.fill(barX, barY, barX + fillWidth, barY + barHeight, fillColor);
             }
 
             // Progress percentage
@@ -625,6 +743,13 @@ public class PackUpdaterConfigScreen extends Screen {
                 progressStr = String.format("%d%% (%.1f/%.1f MB)", percent, downloadedMB, totalMB);
             }
             guiGraphics.centeredText(this.font, progressStr, this.width / 2, barY + 1, 0xFFFFFF);
+
+            // Show error message if applicable
+            if (dm.status == PackUpdaterMod.DownloadStatus.ERROR && dm.errorMessage != null) {
+                String errorMsg = dm.errorMessage;
+                if (errorMsg.length() > 80) errorMsg = errorMsg.substring(0, 77) + "...";
+                guiGraphics.centeredText(this.font, errorMsg, this.width / 2, progressPanelY + 45, 0xFF5555);
+            }
         }
 
         // ===================== STATUS MESSAGE =====================

@@ -2,6 +2,30 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.21] - 2026-11-07
+
+### Fixed
+- **Download never completes visually** — The download progress panel now stays visible through all stages: Checking → Downloading → Verifying → Complete/Error. Previously the panel disappeared as soon as the download finished, leaving no visual feedback that the process had completed
+- **No completion notification** — After a successful download and verification, a clear toast notification appears ("✅ Update downloaded and verified! Restart to install.") and the progress panel shows a green completion bar for 3 seconds before resetting
+- **No button blocking during download** — All interactive buttons (Check for Update, Generate .apepack, Browse .apepack, channel selector, text fields) are now disabled during download and verification, preventing accidental double-clicks or concurrent downloads
+- **No file integrity verification** — After downloading an .apepack from GitHub, the mod now verifies the downloaded file's size matches the GitHub release asset's reported size. If the sizes don't match, the corrupted file is deleted and a clear error message is shown
+
+### Added
+- **`VERIFYING` download status** — New intermediate status between DOWNLOADING and DONE that shows "🔐 Verifying download integrity..." with an orange progress bar
+- **`ApePackAssetInfo` class** — Holds GitHub release asset metadata (download URL, file size, name) for verification
+- **`findApePackAssetStatic()` method** — Fetches full asset metadata from GitHub API instead of just the download URL
+- **SHA-256 hash computation** — Computes SHA-256 hash of the downloaded file during transfer for future verification use
+- **`blockButtons()` method** — Centralized method to enable/disable all interactive widgets in the config screen
+- **`downloading` flag** — Atomic boolean in DownloadManager to prevent concurrent download attempts
+- **Color-coded progress bar** — Progress bar fill color now matches the current status: blue (downloading), orange (verifying), green (complete), red (error)
+- **Error message display** — If a download fails, the error message is shown in the progress panel below the progress bar
+
+### Changed
+- Progress panel now renders for all non-IDLE statuses (CHECKING, DOWNLOADING, VERIFYING, DONE, ERROR)
+- Download progress ranges from 0-85% during transfer, 85-95% during verification, 100% on completion
+- Config screen `init()` now resets VERIFYING status from previous sessions
+- `handleCheckForUpdate()` and `handleDownloadUpdate()` now check the `downloading` flag before starting
+
 ## [0.0.20] - 2026-11-07
 
 ### Fixed
