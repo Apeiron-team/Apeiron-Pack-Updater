@@ -2,6 +2,27 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.10] - 2026-11-07
+
+### Fixed
+- File picker scroll position resetting to top when refreshing files — `refreshFiles()` was resetting `scrollOffset` to 0, causing the list to jump back to the top
+- File picker panel clipping when scrolling too far — button Y positions could go outside the panel bounds, causing the whole selector to appear to move up and down
+- Desktop button not working — the Desktop path resolution failed on some systems; now tries multiple paths (user.home/Desktop, USERPROFILE/Desktop, user.dir/../Desktop)
+- Scrollbar not draggable — replaced MC 26.1.2 `MouseButtonEvent` API with standard `mouseClicked`/`mouseReleased` methods that work correctly
+- Config screen not scaling with in-game GUI scale — all UI elements used `height / 6` for positioning, which broke at different GUI scales; now uses fixed `startY` positioning
+- Config screen Done button now positions at bottom of screen with proper padding
+
+### Changed
+- File picker scroll offset is now clamped to valid range in `refreshFileButtons()` to prevent out-of-bounds scrolling
+- Button Y positions are clamped to panel bounds to prevent visual clipping
+- Config screen uses consistent fixed positioning (startY=50) for all elements regardless of GUI scale
+- Removed unused `MouseButtonEvent` import from file picker
+
+### Details
+- The file picker now properly maintains scroll position when refreshing the file list
+- The scrollbar uses standard Minecraft mouse event methods that work correctly in MC 26.1.2
+- The config screen layout is consistent across all GUI scale settings
+
 ## [0.0.9] - 2026-11-07
 
 ### Fixed

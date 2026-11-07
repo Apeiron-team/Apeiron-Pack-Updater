@@ -159,7 +159,8 @@ public class PackUpdaterConfigScreen extends Screen {
         channelThread.start();
 
         int centerX = this.width / 2;
-        int startY = this.height / 6;
+        // Use fixed spacing instead of height/6 to ensure proper scaling at all GUI scales
+        int startY = 50;
 
         // URL input field
         this.urlField = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("GitHub Release URL"));
@@ -250,8 +251,8 @@ public class PackUpdaterConfigScreen extends Screen {
                 }
         ).bounds(centerX - 100, startY + 60, 200, 20).build());
 
-        // Generate .apepack section
-        int genY = startY + 140;
+        // Generate .apepack section - use relative positioning from startY
+        int genY = startY + 120;
 
         // Pack name field
         this.packNameField = new EditBox(this.font, centerX - 100, genY, 200, 20, Component.literal("Pack Name"));
@@ -341,14 +342,14 @@ public class PackUpdaterConfigScreen extends Screen {
                 }
         ).bounds(centerX - 100, importY + 5, 200, 20).build());
 
-        // Done button
+        // Done button - position at bottom of screen with padding
         this.addRenderableWidget(Button.builder(
                 Component.literal("Done"),
                 button -> {
                     ConfigManager.saveConfig();
                     this.minecraft.setScreen(this.parent);
                 }
-        ).bounds(centerX - 100, importY + 35, 200, 20).build());
+        ).bounds(centerX - 100, this.height - 30, 200, 20).build());
     }
 
 
@@ -371,13 +372,14 @@ public class PackUpdaterConfigScreen extends Screen {
         // Draw a solid background instead of extractBackground() which triggers blur
         // (Minecraft 26.1.2 only allows one blur per frame)
         guiGraphics.fill(0, 0, this.width, this.height, 0xF0000000);
-        guiGraphics.centeredText(this.font, this.title, this.width / 2, 30, 0xFFFFFF);
+        guiGraphics.centeredText(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
 
-        // Draw instructions above the URL field
-        guiGraphics.centeredText(this.font, "Paste a GitHub release link below:", this.width / 2, this.height / 6 - 15, 0xCCCCCC);
+        // Draw instructions above the URL field - use fixed startY
+        int startY = 50;
+        guiGraphics.centeredText(this.font, "Paste a GitHub release link below:", this.width / 2, startY - 15, 0xCCCCCC);
 
         // Draw Generate .apepack section header
-        int genY = this.height / 6 + 140;
+        int genY = startY + 120;
         guiGraphics.centeredText(this.font, "Generate .apepack Pack File", this.width / 2, genY - 20, 0xCCCCCC);
 
         // Draw Import .apepack section header
@@ -385,19 +387,19 @@ public class PackUpdaterConfigScreen extends Screen {
         guiGraphics.centeredText(this.font, "Import .apepack Pack File", this.width / 2, importY - 15, 0xCCCCCC);
 
 
-        // Draw status message
+        // Draw status message - position between check button and channel button
         if (this.statusText.getString() != null && !this.statusText.getString().isEmpty()) {
             int color = 0xFFFF55;
             String msg = this.statusText.getString();
             if (msg.contains("Update found") || msg.contains("prepared") || msg.contains("downloaded") || msg.contains("generated") || msg.contains("installed")) color = 0x55FF55;
             else if (msg.contains("Error") || msg.contains("Invalid") || msg.contains("No downloadable") || msg.contains("No update")) color = 0xFF5555;
-            guiGraphics.centeredText(this.font, msg, this.width / 2, this.height / 6 + 60, color);
+            guiGraphics.centeredText(this.font, msg, this.width / 2, startY + 90, color);
         }
 
         // Show status of detected channels
         String availableInfo = String.format("Auto-update Tiers -> Stable: %s | Beta: %s | Nightly: %s",
                 hasStable, hasBeta, hasNightly);
-        guiGraphics.centeredText(this.font, availableInfo, this.width / 2, this.height / 6 + 90, 0xAAAAAA);
+        guiGraphics.centeredText(this.font, availableInfo, this.width / 2, startY + 110, 0xAAAAAA);
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }

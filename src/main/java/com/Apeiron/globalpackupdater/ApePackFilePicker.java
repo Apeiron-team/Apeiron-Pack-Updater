@@ -141,11 +141,21 @@ public class ApePackFilePicker extends Screen {
                 }
         ).bounds(centerX - 25, navY, 80, 20).build());
 
-        // Quick access: Desktop
+        // Quick access: Desktop - try multiple paths
         this.addRenderableWidget(Button.builder(
                 Component.literal("🖥 Desktop"),
                 button -> {
+                    // Try multiple Desktop paths
                     File desktop = new File(System.getProperty("user.home"), "Desktop");
+                    if (!desktop.exists()) {
+                        String userProfile = System.getenv("USERPROFILE");
+                        if (userProfile != null) {
+                            desktop = new File(userProfile, "Desktop");
+                        }
+                    }
+                    if (!desktop.exists()) {
+                        desktop = new File(new File(System.getProperty("user.dir"), ".."), "Desktop");
+                    }
                     if (desktop.exists()) {
                         this.currentDir = desktop;
                         this.scrollOffset = 0;
@@ -176,9 +186,6 @@ public class ApePackFilePicker extends Screen {
     }
 
     private void refreshFiles() {
-        // Save scroll offset before clearing
-        int savedScrollOffset = 0;
-        
         // Remove old file buttons
         for (Button btn : this.fileButtons) {
             this.removeWidget(btn);
@@ -187,7 +194,7 @@ public class ApePackFilePicker extends Screen {
 
         this.files.clear();
         this.selectedFile = null;
-        this.scrollOffset = 0;
+        // Don't reset scrollOffset here - it causes the list to jump to top
 
         if (this.currentDir == null || !this.currentDir.exists() || !this.currentDir.isDirectory()) {
             return;
@@ -239,12 +246,20 @@ public class ApePackFilePicker extends Screen {
         }
         this.fileButtons.clear();
 
+        int maxScroll = Math.max(0, this.files.size() * ROW_HEIGHT - this.panelHeight);
+        // Clamp scroll offset to valid range
+        this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+
         int visibleRows = this.panelHeight / ROW_HEIGHT;
         int startIndex = this.scrollOffset / ROW_HEIGHT;
         for (int i = 0; i < visibleRows + 1 && startIndex + i < this.files.size(); i++) {
             int index = startIndex + i;
             FileInfo info = this.files.get(index);
             int y = this.panelTop + i * ROW_HEIGHT - (this.scrollOffset % ROW_HEIGHT);
+
+            // Clamp Y position to panel bounds to prevent clipping
+            if (y < this.panelTop) y = this.panelTop;
+            if (y + ROW_HEIGHT > this.panelTop + this.panelHeight) y = this.panelTop + this.panelHeight - ROW_HEIGHT;
 
             String displayName;
             if (info.isDirectory) {
