@@ -236,9 +236,9 @@ public class ApePackLoader {
     }
 
     /**
-     * Scans the mods directory for any .apepack files and installs them.
+     * Scans the mods and apepacks directories for any .apepack files and installs them.
      * Removes processed .apepack files after successful installation.
-     * Installs to the instance root directory (parent of mods/).
+     * Installs to the instance root directory.
      */
     public static void scanAndInstall(Path modsDir) {
         if (!Files.exists(modsDir)) return;
@@ -247,39 +247,69 @@ public class ApePackLoader {
         Path instanceRoot = modsDir.getParent();
         if (instanceRoot == null) instanceRoot = Path.of(".");
 
-        try (Stream<Path> paths = Files.list(modsDir)) {
-            List<Path> apepackFiles = paths
-                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
-                    .collect(Collectors.toList());
+        // Collect .apepack files from both mods/ and apepacks/ directories
+        List<Path> apepackFiles = new ArrayList<>();
 
-            for (Path apepackFile : apepackFiles) {
-                System.out.println("[PackUpdater] Found .apepack file: " + apepackFile.getFileName());
-                try {
-                    InstallResult result = installApePack(apepackFile, instanceRoot);
-                    if (result.success) {
-                        System.out.println("[PackUpdater] Installed " + result.newFilesInstalled +
-                                " new file(s), skipped " + result.skippedDuplicates +
-                                " duplicate(s), protected " + result.skippedProtected + " user setting(s)");
-                        System.out.println("[PackUpdater] Pack: " + result.packInfo.packName +
-                                " v" + result.packInfo.packVersion +
-                                " (MC " + result.packInfo.mcVersion + ")");
-                        System.out.println("[PackUpdater] Mods: " + result.packInfo.modCount +
-                                ", Configs: " + result.packInfo.configCount +
-                                ", Scripts: " + result.packInfo.scriptCount);
-                        // Remove the .apepack file after successful install
-                        Files.delete(apepackFile);
-                        System.out.println("[PackUpdater] Removed processed .apepack file");
-                    } else {
-                        System.err.println("[PackUpdater] Failed to install " + apepackFile.getFileName() +
-                                ": " + result.errorMessage);
-                    }
-                } catch (Exception e) {
-                    System.err.println("[PackUpdater] Error processing " + apepackFile.getFileName() +
-                            ": " + e.getMessage());
-                }
-            }
+        // Scan mods/ directory
+        try (Stream<Path> paths = Files.list(modsDir)) {
+            apepackFiles.addAll(paths
+                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                    .collect(Collectors.toList()));
         } catch (IOException e) {
             System.err.println("[PackUpdater] Error scanning mods directory: " + e.getMessage());
+        }
+
+        // Scan apepacks/ directory
+        Path apepacksDir = instanceRoot.resolve("apepacks");
+        if (Files.exists(apepacksDir)) {
+            try (Stream<Path> paths = Files.list(apepacksDir)) {
+                List<Path> apepacksFiles = paths
+                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                        .collect(Collectors.toList());
+                // Sort by modification time (oldest first) to install in order
+                apepacksFiles.sort(Comparator.comparingLong(p -> {
+                    try {
+                        return Files.getLastModifiedTime(p).toMillis();
+                    } catch (IOException e) {
+                        return 0;
+                    }
+                }));
+                apepackFiles.addAll(apepacksFiles);
+            } catch (IOException e) {
+                System.err.println("[PackUpdater] Error scanning apepacks directory: " + e.getMessage());
+            }
+        }
+
+        if (apepackFiles.isEmpty()) {
+            return;
+        }
+
+        // Install all found .apepack files
+        for (Path apepackFile : apepackFiles) {
+            System.out.println("[PackUpdater] Found .apepack file: " + apepackFile.getFileName());
+            try {
+                InstallResult result = installApePack(apepackFile, instanceRoot);
+                if (result.success) {
+                    System.out.println("[PackUpdater] Installed " + result.newFilesInstalled +
+                            " new file(s), skipped " + result.skippedDuplicates +
+                            " duplicate(s), protected " + result.skippedProtected + " user setting(s)");
+                    System.out.println("[PackUpdater] Pack: " + result.packInfo.packName +
+                            " v" + result.packInfo.packVersion +
+                            " (MC " + result.packInfo.mcVersion + ")");
+                    System.out.println("[PackUpdater] Mods: " + result.packInfo.modCount +
+                            ", Configs: " + result.packInfo.configCount +
+                            ", Scripts: " + result.packInfo.scriptCount);
+                    // Remove the .apepack file after successful install
+                    Files.delete(apepackFile);
+                    System.out.println("[PackUpdater] Removed processed .apepack file");
+                } else {
+                    System.err.println("[PackUpdater] Failed to install " + apepackFile.getFileName() +
+                            ": " + result.errorMessage);
+                }
+            } catch (Exception e) {
+                System.err.println("[PackUpdater] Error processing " + apepackFile.getFileName() +
+                        ": " + e.getMessage());
+            }
         }
     }
 

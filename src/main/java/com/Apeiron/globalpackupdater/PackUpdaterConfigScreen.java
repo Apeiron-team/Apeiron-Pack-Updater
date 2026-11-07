@@ -383,8 +383,8 @@ public class PackUpdaterConfigScreen extends Screen {
                                                     boolean apePackDownloaded = PackUpdaterMod.downloadLatestApePack(repo);
                                                     Minecraft.getInstance().execute(() -> {
                                                         if (apePackDownloaded) {
-                                                            this.statusText = Component.literal(".apepack downloaded! Restart to install.");
-                                                            showToast("✅ Update downloaded! Restart to install.");
+                                                            this.statusText = Component.literal(".apepack saved to apepacks/ folder! Restart to extract and install.");
+                                                            showToast("✅ Update saved! Restart to extract.");
                                                         } else {
                                                             this.statusText = Component.literal("No .apepack found. Trying zip...");
                                                             String downloadUrl = extractDownloadUrl("https://github.com/" + repo + "/releases/latest");

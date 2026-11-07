@@ -2,6 +2,15 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.15] - 2026-11-07
+
+### Changed
+- Downloaded `.apepack` update files now save to a dedicated `apepacks/` folder in the game directory instead of the `mods/` folder, keeping the mods folder clean
+- On game startup, the mod automatically scans both `mods/` and `apepacks/` directories for `.apepack` files
+- When `.apepack` files are found on startup, an extraction progress screen appears showing real-time progress with a progress bar, file names, and live counts (new/skipped/protected)
+- After extraction completes, the user is prompted to restart the game to apply all changes
+- Toast notifications now inform the user that the update was saved to the `apepacks/` folder and will be extracted on restart
+
 ## [0.0.14] - 2026-11-07
 
 ### Fixed

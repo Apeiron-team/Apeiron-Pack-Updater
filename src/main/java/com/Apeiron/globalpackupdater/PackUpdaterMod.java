@@ -49,12 +49,59 @@ public class PackUpdaterMod {
     private void onClientSetup(FMLClientSetupEvent event) {
         performCleanup();
 
-        // Scan for .apepack files in the mods directory on startup
+        // Scan for .apepack files in the mods and apepacks directories on startup
         Thread scanThread = new Thread(() -> {
             try {
                 Path modsDir = INSTANCE_ROOT.resolve("mods");
                 if (Files.exists(modsDir)) {
-                    ApePackLoader.scanAndInstall(modsDir);
+                    // Check if there are any .apepack files to install
+                    boolean hasApepacks = false;
+                    try (Stream<Path> paths = Files.list(modsDir)) {
+                        if (paths.anyMatch(p -> p.toString().toLowerCase().endsWith(".apepack"))) {
+                            hasApepacks = true;
+                        }
+                    }
+                    Path apepacksDir = getApepacksDir();
+                    if (Files.exists(apepacksDir)) {
+                        try (Stream<Path> paths = Files.list(apepacksDir)) {
+                            if (paths.anyMatch(p -> p.toString().toLowerCase().endsWith(".apepack"))) {
+                                hasApepacks = true;
+                            }
+                        }
+                    }
+
+                    if (hasApepacks) {
+                        // Show the import progress screen on the main thread
+                        Minecraft.getInstance().execute(() -> {
+                            // Find the first .apepack file to show in the progress screen
+                            Path apepackFile = null;
+                            try (Stream<Path> paths = Files.list(modsDir)) {
+                                apepackFile = paths
+                                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                        .findFirst()
+                                        .orElse(null);
+                            } catch (IOException ignored) {}
+                            if (apepackFile == null && Files.exists(apepacksDir)) {
+                                try (Stream<Path> paths = Files.list(apepacksDir)) {
+                                    apepackFile = paths
+                                            .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                            .findFirst()
+                                            .orElse(null);
+                                } catch (IOException ignored) {}
+                            }
+                            if (apepackFile != null) {
+                                ApePackImportScreen importScreen = new ApePackImportScreen(
+                                        new net.minecraft.client.gui.screens.TitleScreen(),
+                                        apepackFile, INSTANCE_ROOT);
+                                Minecraft.getInstance().setScreen(importScreen);
+                                // Start the import in the background
+                                importScreen.startImport();
+                            }
+                        });
+                    } else {
+                        // No .apepack files, just run the silent scan
+                        ApePackLoader.scanAndInstall(modsDir);
+                    }
                 }
             } catch (Exception e) {
                 System.err.println("[PackUpdater] ApePack scan failed: " + e.getMessage());
@@ -114,14 +161,15 @@ public class PackUpdaterMod {
 
     private void prepareUpdate(String repo) {
         try {
-            // First try to download .apepack file from GitHub releases
-            Path modsDir = INSTANCE_ROOT.resolve("mods");
-            Files.createDirectories(modsDir);
+            // Save to apepacks/ folder in the game directory
+            Path apepacksDir = INSTANCE_ROOT.resolve("apepacks");
+            Files.createDirectories(apepacksDir);
 
             // Look for .apepack asset in the latest release
             String apepackUrl = findApePackUrl(repo);
             if (apepackUrl != null) {
-                Path targetApePack = modsDir.resolve("update.apepack");
+                String timestamp = java.time.LocalDateTime.now().toString().replace(":", "-").replace(" ", "_");
+                Path targetApePack = apepacksDir.resolve("update_" + timestamp + ".apepack");
                 downloadFile(apepackUrl, targetApePack);
                 System.out.println("[PackUpdater] Downloaded .apepack update to " + targetApePack);
                 Files.writeString(INSTANCE_ROOT.resolve("update_success.json"), "{\"version\":\"apepack\"}");
@@ -232,7 +280,7 @@ public class PackUpdaterMod {
     }
 
     /**
-     * Downloads the latest .apepack file from a GitHub repo and places it in the mods folder.
+     * Downloads the latest .apepack file from a GitHub repo and places it in the apepacks folder.
      * Returns true if an .apepack was found and downloaded, false otherwise.
      */
     public static boolean downloadLatestApePack(String repo) {
@@ -243,9 +291,13 @@ public class PackUpdaterMod {
                 return false;
             }
 
-            Path modsDir = INSTANCE_ROOT.resolve("mods");
-            Files.createDirectories(modsDir);
-            Path targetApePack = modsDir.resolve("update.apepack");
+            // Save to apepacks/ folder in the game directory
+            Path apepacksDir = INSTANCE_ROOT.resolve("apepacks");
+            Files.createDirectories(apepacksDir);
+            
+            // Generate a unique filename with timestamp to avoid conflicts
+            String timestamp = java.time.LocalDateTime.now().toString().replace(":", "-").replace(" ", "_");
+            Path targetApePack = apepacksDir.resolve("update_" + timestamp + ".apepack");
 
             URL url = URI.create(apepackUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -260,13 +312,20 @@ public class PackUpdaterMod {
             }
 
             System.out.println("[PackUpdater] Downloaded .apepack update to " + targetApePack);
-            System.out.println("[PackUpdater] Restart the game to install the update.");
+            System.out.println("[PackUpdater] The update will be installed on next game startup.");
             return true;
 
         } catch (Exception e) {
             System.err.println("[PackUpdater] Failed to download .apepack: " + e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Gets the apepacks directory path for storing downloaded .apepack files.
+     */
+    public static Path getApepacksDir() {
+        return INSTANCE_ROOT.resolve("apepacks");
     }
 
     /**
