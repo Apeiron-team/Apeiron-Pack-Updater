@@ -2,6 +2,12 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.22] - 2026-11-07
+
+### Fixed
+- **Download button clickable multiple times** — The "Download Update" button was not included in `blockButtons()`, so it remained clickable even while a download was in progress. Now the download button is tracked as a separate field and properly disabled during download and verification, preventing concurrent download attempts
+- **Download button state not reset on completion** — After a successful download, the `downloadButton` reference is now cleared so the next check creates a fresh button instead of reusing the old disabled one
+
 ## [0.0.21] - 2026-11-07
 
 ### Fixed

@@ -30,6 +30,7 @@ public class PackUpdaterConfigScreen extends Screen {
     private EditBox urlField;
     private EditBox tokenField;
     private Button checkButton;
+    private Button downloadButton = null; // The "Download Update" button (created dynamically)
     private Component statusText = Component.literal("");
 
     // Generate .apepack fields
@@ -370,6 +371,7 @@ public class PackUpdaterConfigScreen extends Screen {
      */
     private void blockButtons(boolean block) {
         if (this.checkButton != null) this.checkButton.active = !block;
+        if (this.downloadButton != null) this.downloadButton.active = !block;
         if (this.generateButton != null) this.generateButton.active = !block;
         if (this.browseButton != null) this.browseButton.active = !block;
         if (this.channelButton != null) this.channelButton.active = !block;
@@ -441,10 +443,11 @@ public class PackUpdaterConfigScreen extends Screen {
                         int btnW = this.checkButton.getWidth();
                         int btnH = this.checkButton.getHeight();
                         this.removeWidget(checkButton);
-                        this.checkButton = this.addRenderableWidget(Button.builder(
+                        this.downloadButton = this.addRenderableWidget(Button.builder(
                                 Component.literal("Download Update"),
                                 b -> handleDownloadUpdate(repo)
                         ).bounds(btnX, btnY, btnW, btnH).build());
+                        this.checkButton = this.downloadButton; // Keep checkButton in sync
                         // Unblock buttons so user can click Download
                         blockButtons(false);
                     } else {
@@ -457,6 +460,7 @@ public class PackUpdaterConfigScreen extends Screen {
                         int btnW = this.checkButton.getWidth();
                         int btnH = this.checkButton.getHeight();
                         this.removeWidget(checkButton);
+                        this.downloadButton = null;
                         this.checkButton = this.addRenderableWidget(Button.builder(
                                 Component.literal("Check for Update"),
                                 b -> handleCheckForUpdate()
@@ -467,6 +471,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     this.statusText = Component.literal(result.message);
                     showToast("❌ " + result.message);
                     dm.setError(result.message);
+                    this.downloadButton = null;
                     blockButtons(false);
                 }
             });
@@ -511,6 +516,7 @@ public class PackUpdaterConfigScreen extends Screen {
                                 // Reset to idle state after showing completion
                                 dm.setIdle();
                                 if (self[0] != null) {
+                                    self[0].downloadButton = null;
                                     self[0].blockButtons(false);
                                     // Restore check button
                                     if (self[0].checkButton != null) {
@@ -536,6 +542,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     this.statusText = Component.literal("Download failed: " + errorMsg);
                     showToast("❌ Download failed: " + errorMsg);
                     // dm.setError already called by downloadLatestApePack
+                    this.downloadButton = null;
                     blockButtons(false);
                     // Restore check button
                     if (this.checkButton != null) {
