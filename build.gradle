@@ -1,0 +1,14 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.70'
+}
+
+version = '0.0.1'
+group = 'com.Apeiron.globalpackupdater'
+
+repositories {
+    mavenCentral()
+}
+
+neoforge {
+    version = '26.1.2'
+}
