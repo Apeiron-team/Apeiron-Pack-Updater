@@ -74,6 +74,96 @@ public class ApePackLoader {
     }
 
     /**
+     * Extracts the base mod name from a JAR filename by removing version suffixes.
+     * E.g., "sodium-0.6.13+mc26.1.2.jar" -> "sodium"
+     * E.g., "c2me-neoforge-mc26.1.2-0.3.0.jar" -> "c2me-neoforge-mc26.1.2"
+     */
+    private static String extractModBaseName(String jarFileName) {
+        // Remove .jar extension
+        String name = jarFileName;
+        if (name.toLowerCase().endsWith(".jar")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        // Try to find the version pattern at the end: -VERSION or +mcVERSION-VERSION
+        // Common patterns: "modname-1.2.3", "modname-mc1.21.1-1.2.3", "modname-1.2.3+mc1.21.1"
+        // We look for the last -digit pattern that looks like a version
+        int lastDash = -1;
+        boolean foundVersionStart = false;
+        for (int i = name.length() - 1; i >= 0; i--) {
+            char c = name.charAt(i);
+            if (Character.isDigit(c) || c == '.' || c == '+' || c == '_') {
+                if (!foundVersionStart && (Character.isDigit(c) || c == '.')) {
+                    foundVersionStart = true;
+                }
+            } else if (c == '-' && foundVersionStart) {
+                lastDash = i;
+                break;
+            } else if (foundVersionStart) {
+                break;
+            }
+        }
+        if (lastDash > 0) {
+            return name.substring(0, lastDash);
+        }
+        return name;
+    }
+
+    /**
+     * Extracts the version string from a JAR filename.
+     * E.g., "sodium-0.6.13+mc26.1.2.jar" -> "0.6.13+mc26.1.2"
+     * E.g., "c2me-neoforge-mc26.1.2-0.3.0.jar" -> "0.3.0"
+     */
+    private static String extractModVersion(String jarFileName) {
+        String name = jarFileName;
+        if (name.toLowerCase().endsWith(".jar")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        // Find the version part after the last dash
+        int lastDash = name.lastIndexOf('-');
+        if (lastDash > 0) {
+            return name.substring(lastDash + 1);
+        }
+        // Try to find version after +mc pattern
+        int mcIndex = name.indexOf("+mc");
+        if (mcIndex > 0) {
+            return name.substring(mcIndex);
+        }
+        return "0";
+    }
+
+    /**
+     * Compares two version strings. Returns positive if v1 > v2, negative if v1 < v2, 0 if equal.
+     * Handles versions like "1.2.3", "0.6.13+mc26.1.2", "alpha.0.89", etc.
+     */
+    private static int compareVersions(String v1, String v2) {
+        if (v1 == null || v1.isEmpty()) return -1;
+        if (v2 == null || v2.isEmpty()) return 1;
+        if (v1.equals(v2)) return 0;
+
+        // Split by common delimiters: . + - _
+        String[] parts1 = v1.split("[.+\\-_]");
+        String[] parts2 = v2.split("[.+\\-_]");
+
+        int maxLen = Math.max(parts1.length, parts2.length);
+        for (int i = 0; i < maxLen; i++) {
+            String p1 = i < parts1.length ? parts1[i] : "0";
+            String p2 = i < parts2.length ? parts2[i] : "0";
+
+            // Try to parse as numbers first
+            try {
+                long num1 = Long.parseLong(p1);
+                long num2 = Long.parseLong(p2);
+                if (num1 != num2) return Long.compare(num1, num2);
+            } catch (NumberFormatException e) {
+                // Not a number, compare as strings
+                int cmp = p1.compareTo(p2);
+                if (cmp != 0) return cmp;
+            }
+        }
+        return 0;
+    }
+
+    /**
      * Represents the top-level apepack metadata.
      */
     public static class ApePackInfo {
@@ -268,17 +358,76 @@ public class ApePackLoader {
                 boolean isDuplicate = false;
 
                 if (Files.exists(targetPath)) {
-                    String existingHash = computeSha256(targetPath);
-                    if (existingHash != null && existingHash.equalsIgnoreCase(entry.sha256)) {
-                        skipped.add(entry.name + " (" + entry.type + ")");
-                        isDuplicate = true;
-                        if (progress != null) progress.onFileSkipped(entry.name);
+                    // For mods, check version before replacing
+                    if ("mod".equals(entry.type)) {
+                        String existingHash = computeSha256(targetPath);
+                        if (existingHash != null && existingHash.equalsIgnoreCase(entry.sha256)) {
+                            // Same file, skip
+                            skipped.add(entry.name + " (" + entry.type + ")");
+                            isDuplicate = true;
+                            if (progress != null) progress.onFileSkipped(entry.name);
+                        } else {
+                            // Different file — check if it's the same mod with a lower version
+                            String existingFileName = targetPath.getFileName().toString();
+                            String existingBaseName = extractModBaseName(existingFileName);
+                            String newBaseName = extractModBaseName(entry.name);
+
+                            // If base names match, compare versions
+                            if (existingBaseName.equalsIgnoreCase(newBaseName)) {
+                                // Extract version from the existing installed file's filename
+                                String existingVersion = extractModVersion(existingFileName);
+                                // Use manifest version if available, otherwise extract from the new file's name
+                                String newVersion = (entry.version != null && !entry.version.equals("unknown"))
+                                        ? entry.version : extractModVersion(entry.filePath);
+
+                                int versionCompare = compareVersions(newVersion, existingVersion);
+                                if (versionCompare <= 0) {
+                                    // New version is same or older, skip
+                                    skipped.add(entry.name + " (" + entry.type + ", version " + newVersion + " <= " + existingVersion + ")");
+                                    isDuplicate = true;
+                                    if (progress != null) progress.onFileSkipped(entry.name);
+                                    System.out.println("[PackUpdater] Skipped older/same version: " + entry.name +
+                                            " (new: " + newVersion + ", installed: " + existingVersion + ")");
+                                } else {
+                                    // New version is higher, replace and remove old
+                                    System.out.println("[PackUpdater] Updating mod: " + entry.name +
+                                            " (" + existingVersion + " -> " + newVersion + ")");
+                                }
+                            }
+                            // If base names don't match, proceed with install (different mod)
+                        }
+                    } else {
+                        // Non-mod files: use hash comparison
+                        String existingHash = computeSha256(targetPath);
+                        if (existingHash != null && existingHash.equalsIgnoreCase(entry.sha256)) {
+                            skipped.add(entry.name + " (" + entry.type + ")");
+                            isDuplicate = true;
+                            if (progress != null) progress.onFileSkipped(entry.name);
+                        }
                     }
                 }
 
                 if (!isDuplicate) {
                     // Ensure parent directory exists
                     Files.createDirectories(targetPath.getParent());
+
+                    // If replacing a mod, delete old versions with the same base name first
+                    if ("mod".equals(entry.type) && Files.exists(targetPath)) {
+                        String existingFileName = targetPath.getFileName().toString();
+                        String existingBaseName = extractModBaseName(existingFileName);
+                        String newBaseName = extractModBaseName(entry.name);
+
+                        if (existingBaseName.equalsIgnoreCase(newBaseName)) {
+                            // Delete the old mod file
+                            try {
+                                Files.delete(targetPath);
+                                System.out.println("[PackUpdater] Removed old mod: " + existingFileName);
+                            } catch (IOException e) {
+                                System.err.println("[PackUpdater] Failed to remove old mod: " + existingFileName +
+                                        ": " + e.getMessage());
+                            }
+                        }
+                    }
 
                     // Extract the file from the zip
                     ZipArchiveEntry fileEntry = zipFile.getEntry(entry.filePath);

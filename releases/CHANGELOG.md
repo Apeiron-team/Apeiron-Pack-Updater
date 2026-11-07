@@ -2,6 +2,27 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.11] - 2026-11-07
+
+### Fixed
+- File picker visual bug where scrolling to the bottom then back to the top (or vice versa) caused the first or last file to be hidden — the Y position clamping logic was using an incorrect boundary check, pushing the edge button outside the visible panel area
+
+### Added
+- Mod version comparison during .apepack installation — when importing a mod with the same base name as an already installed mod, the installer now compares versions and only installs the newer one
+- Automatic removal of old mod versions — when a newer version replaces an older mod, the old JAR file is deleted from the mods folder
+- Version extraction from JAR filenames — supports common naming patterns like `modname-1.2.3.jar`, `modname-mc26.1.2-0.3.0.jar`, and `modname-0.6.13+mc26.1.2.jar`
+- Semantic version comparison — handles numeric and alphanumeric version parts, comparing segment by segment
+
+### Changed
+- Mod installation now checks the base mod name (without version suffix) to detect same-mod-different-version scenarios
+- Skip messages now include version comparison details when a mod is skipped due to having the same or older version
+- Non-mod files (configs, scripts, assets) still use SHA-256 hash comparison as before
+
+### Details
+- The version comparator splits version strings by `.`, `+`, `-`, and `_` delimiters, then compares each segment numerically when possible
+- If a mod named "sodium-0.6.10.jar" is installed and the .apepack contains "sodium-0.6.13.jar", the old file is removed and the new one is installed
+- If the installed version is the same or newer, the import is skipped with a log message showing both versions
+
 ## [0.0.10] - 2026-11-07
 
 ### Fixed

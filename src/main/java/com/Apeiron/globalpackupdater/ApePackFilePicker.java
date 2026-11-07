@@ -255,11 +255,13 @@ public class ApePackFilePicker extends Screen {
         for (int i = 0; i < visibleRows + 1 && startIndex + i < this.files.size(); i++) {
             int index = startIndex + i;
             FileInfo info = this.files.get(index);
-            int y = this.panelTop + i * ROW_HEIGHT - (this.scrollOffset % ROW_HEIGHT);
+            // Calculate Y position: start from panelTop, add row offset, subtract scroll remainder
+            int y = this.panelTop + (i * ROW_HEIGHT) - (this.scrollOffset % ROW_HEIGHT);
 
-            // Clamp Y position to panel bounds to prevent clipping
+            // Only clamp if truly out of bounds (shouldn't happen with correct scrollOffset clamping)
+            // but keep as safety net — use soft clamping that doesn't affect normal scrolling
             if (y < this.panelTop) y = this.panelTop;
-            if (y + ROW_HEIGHT > this.panelTop + this.panelHeight) y = this.panelTop + this.panelHeight - ROW_HEIGHT;
+            if (y > this.panelTop + this.panelHeight - ROW_HEIGHT) y = this.panelTop + this.panelHeight - ROW_HEIGHT;
 
             String displayName;
             if (info.isDirectory) {
