@@ -34,7 +34,7 @@ public class ApePackFilePicker extends Screen {
 
     // Scroll state
     private int scrollOffset = 0;
-    private int panelTop = 80;
+    private int panelTop = 75;
     private int panelHeight = 0;
     private int panelLeft = 20;
     private int panelWidth = 0;
@@ -62,8 +62,8 @@ public class ApePackFilePicker extends Screen {
         this.panelWidth = this.width - 40;
         this.panelHeight = this.height - this.panelTop - 100;
 
-        // Path input field at the top
-        this.pathField = new EditBox(this.font, centerX - 150, 50, 300, 20, Component.literal("Path"));
+        // Path input field at the top (moved up to y=28)
+        this.pathField = new EditBox(this.font, centerX - 150, 28, 300, 20, Component.literal("Path"));
         this.pathField.setHint(Component.literal("Browse or type a folder path"));
         this.pathField.setValue(this.currentDir.getAbsolutePath());
         this.addRenderableWidget(this.pathField);
@@ -82,7 +82,10 @@ public class ApePackFilePicker extends Screen {
                         }
                     }
                 }
-        ).bounds(centerX + 155, 50, 40, 20).build());
+        ).bounds(centerX + 155, 28, 40, 20).build());
+
+        // Navigation buttons row (y=52, below path field)
+        int navY = 52;
 
         // Back button
         this.addRenderableWidget(Button.builder(
@@ -94,7 +97,7 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 200, 50, 50, 20).build());
+        ).bounds(centerX - 200, navY, 50, 20).build());
 
         // Up button (go to parent)
         this.addRenderableWidget(Button.builder(
@@ -106,7 +109,7 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 145, 50, 50, 20).build());
+        ).bounds(centerX - 145, navY, 50, 20).build());
 
         // Quick access: Home folder
         this.addRenderableWidget(Button.builder(
@@ -116,7 +119,7 @@ public class ApePackFilePicker extends Screen {
                     this.scrollOffset = 0;
                     refreshFiles();
                 }
-        ).bounds(centerX - 90, 50, 60, 20).build());
+        ).bounds(centerX - 90, navY, 60, 20).build());
 
         // Quick access: Downloads folder
         this.addRenderableWidget(Button.builder(
@@ -129,7 +132,7 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 25, 50, 80, 20).build());
+        ).bounds(centerX - 25, navY, 80, 20).build());
 
         // Quick access: Desktop
         this.addRenderableWidget(Button.builder(
@@ -142,7 +145,7 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX + 60, 50, 80, 20).build());
+        ).bounds(centerX + 60, navY, 80, 20).build());
 
         // Select button
         this.addRenderableWidget(Button.builder(
@@ -214,7 +217,7 @@ public class ApePackFilePicker extends Screen {
 
         this.pathField.setValue(this.currentDir.getAbsolutePath());
 
-        // Add invisible buttons for each file (for click handling)
+        // Add buttons for each file with visible names
         int visibleRows = this.panelHeight / ROW_HEIGHT;
         int startIndex = this.scrollOffset / ROW_HEIGHT;
         for (int i = 0; i < visibleRows + 1 && startIndex + i < this.files.size(); i++) {
@@ -222,9 +225,16 @@ public class ApePackFilePicker extends Screen {
             FileInfo info = this.files.get(index);
             int y = this.panelTop + i * ROW_HEIGHT - (this.scrollOffset % ROW_HEIGHT);
 
+            String displayName;
+            if (info.isDirectory) {
+                displayName = "📁 " + info.file.getName();
+            } else {
+                displayName = info.file.getName();
+            }
+
             final FileInfo finalInfo = info;
             Button fileButton = Button.builder(
-                    Component.empty(),
+                    Component.literal(displayName),
                     btn -> {
                         if (finalInfo.isDirectory) {
                             this.currentDir = finalInfo.file;
@@ -234,7 +244,7 @@ public class ApePackFilePicker extends Screen {
                             this.selectedFile = finalInfo.file;
                         }
                     }
-            ).bounds(this.panelLeft, y, this.panelWidth, ROW_HEIGHT).build();
+            ).bounds(this.panelLeft + 2, y + 1, this.panelWidth - 4, ROW_HEIGHT - 2).build();
             this.addRenderableWidget(fileButton);
             this.fileButtons.add(fileButton);
         }
@@ -260,7 +270,7 @@ public class ApePackFilePicker extends Screen {
         guiGraphics.fill(0, 0, this.width, this.height, 0xF0000000);
 
         // Title
-        guiGraphics.centeredText(this.font, "Select .apepack File", this.width / 2, 25, 0xFFFFFF);
+        guiGraphics.centeredText(this.font, "Select .apepack File", this.width / 2, 8, 0xFFFFFF);
 
         // Current directory label
         guiGraphics.centeredText(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
@@ -274,7 +284,7 @@ public class ApePackFilePicker extends Screen {
         guiGraphics.fill(this.panelLeft, this.panelTop, this.panelLeft, this.panelTop + this.panelHeight, 0x88888888);
         guiGraphics.fill(this.panelLeft + this.panelWidth - 1, this.panelTop, this.panelLeft + this.panelWidth, this.panelTop + this.panelHeight, 0x88888888);
 
-        // Draw file entries
+        // Draw file entries - highlight backgrounds behind buttons
         int visibleRows = this.panelHeight / ROW_HEIGHT;
         int startIndex = this.scrollOffset / ROW_HEIGHT;
 
@@ -285,7 +295,6 @@ public class ApePackFilePicker extends Screen {
 
             if (y < this.panelTop || y + ROW_HEIGHT > this.panelTop + this.panelHeight) continue;
 
-            String name = info.isDirectory ? "📁 " + info.file.getName() + "/" : getFileName(info.file);
             boolean isApepack = !info.isDirectory && info.file.getName().toLowerCase().endsWith(".apepack");
 
             // Highlight selected file
@@ -293,43 +302,11 @@ public class ApePackFilePicker extends Screen {
             boolean isHovered = mouseX >= this.panelLeft && mouseX <= this.panelLeft + this.panelWidth &&
                     mouseY >= y && mouseY < y + ROW_HEIGHT;
 
-            int color;
-            if (isSelected) {
-                color = 0x55FF55;
-            } else if (isApepack) {
-                color = isHovered ? 0x88DDFF : 0x55AAFF;
-            } else if (info.isDirectory) {
-                color = isHovered ? 0xDDDDDD : 0xAAAAAA;
-            } else {
-                color = isHovered ? 0x999999 : 0x777777;
-            }
-
             // Draw background for hover/selection
             if (isSelected) {
-                guiGraphics.fill(this.panelLeft + 2, y, this.panelLeft + this.panelWidth - 2, y + ROW_HEIGHT, 0x4000AA00);
+                guiGraphics.fill(this.panelLeft + 2, y + 1, this.panelLeft + this.panelWidth - 2, y + ROW_HEIGHT - 1, 0x4000AA00);
             } else if (isHovered && isApepack) {
-                guiGraphics.fill(this.panelLeft + 2, y, this.panelLeft + this.panelWidth - 2, y + ROW_HEIGHT, 0x200000FF);
-            }
-
-            // Draw file name
-            guiGraphics.centeredText(
-                    this.font,
-                    name,
-                    this.panelLeft + this.panelWidth / 2 - 50,
-                    y + 6,
-                    color
-            );
-
-            // Draw file size for .apepack files
-            if (isApepack) {
-                String size = formatSize(info.file.length());
-                guiGraphics.centeredText(
-                        this.font,
-                        size,
-                        this.panelLeft + this.panelWidth / 2 + 80,
-                        y + 6,
-                        0x888888
-                );
+                guiGraphics.fill(this.panelLeft + 2, y + 1, this.panelLeft + this.panelWidth - 2, y + ROW_HEIGHT - 1, 0x200000FF);
             }
         }
 

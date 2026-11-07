@@ -2,6 +2,24 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.7] - 2026-11-07
+
+### Fixed
+- File picker buttons showing blank gray bars instead of file names — buttons now display actual file/folder names
+- Navigation buttons overlapping with the file list panel — repositioned layout so buttons are above the panel
+- Title text overlapping with navigation buttons — moved title higher on the screen
+
+### Changed
+- File list buttons now use `Component.literal()` with file names instead of `Component.empty()`
+- Navigation button row moved to y=52, file panel starts at y=75 with proper spacing
+- Path input field moved to y=28 for better layout hierarchy
+- Removed redundant file name text rendering from `extractRenderState` (buttons handle their own text now)
+
+### Details
+- The file picker now properly shows file and folder names on each button row
+- Directory entries show with folder icon prefix (📁)
+- Layout is properly organized: title → path input → navigation buttons → file panel → action buttons
+
 ## [0.0.6] - 2026-11-07
 
 ### Added
