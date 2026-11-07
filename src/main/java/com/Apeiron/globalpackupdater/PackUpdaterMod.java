@@ -128,11 +128,12 @@ public class PackUpdaterMod {
                     if (hasApepacks) {
                         // Show the import progress screen on the main thread
                         Minecraft.getInstance().execute(() -> {
-                            // Find the first .apepack file to show in the progress screen
+                            // Find the first unprocessed .apepack file to show in the progress screen
                             Path apepackFile = null;
                             try (Stream<Path> paths = Files.list(modsDir)) {
                                 apepackFile = paths
                                         .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                        .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
                                         .findFirst()
                                         .orElse(null);
                             } catch (IOException ignored) {}
@@ -140,6 +141,7 @@ public class PackUpdaterMod {
                                 try (Stream<Path> paths = Files.list(apepacksDir)) {
                                     apepackFile = paths
                                             .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                            .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
                                             .findFirst()
                                             .orElse(null);
                                 } catch (IOException ignored) {}
@@ -151,6 +153,9 @@ public class PackUpdaterMod {
                                 Minecraft.getInstance().setScreen(importScreen);
                                 // Start the import in the background
                                 importScreen.startImport();
+                            } else {
+                                // All .apepack files are already processed, just notify
+                                System.out.println("[PackUpdater] All .apepack files have already been processed.");
                             }
                         });
                     } else {

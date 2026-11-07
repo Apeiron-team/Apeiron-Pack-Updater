@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 /**
  * Loading screen shown during .apepack import.
@@ -142,6 +143,24 @@ public class ApePackImportScreen extends Screen {
                                     errorMessage = error != null ? error : "";
                                     currentFile = "";
                                     currentFileType = "";
+                                    // Mark the .apepack as processed and update modpack version
+                                    if (success) {
+                                        ApePackLoader.markApePackAsProcessed(apepackFile);
+                                        // Update the modpack version in the config
+                                        if (!packVersion.isEmpty()) {
+                                            ConfigManager.updateModpackVersion(packVersion);
+                                        }
+                                        // Delete the .apepack file after successful install
+                                        try {
+                                            java.nio.file.Files.deleteIfExists(apepackFile);
+                                            System.out.println("[PackUpdater] Removed processed .apepack file");
+                                        } catch (Exception e) {
+                                            System.err.println("[PackUpdater] Failed to remove .apepack file: " + e.getMessage());
+                                        }
+                                        System.out.println("[PackUpdater] ✅ .apepack installation complete! Restart recommended.");
+                                    } else {
+                                        System.err.println("[PackUpdater] ❌ .apepack installation failed: " + error);
+                                    }
                                     // Rebuild buttons
                                     clearWidgets();
                                     init();
@@ -189,26 +208,25 @@ public class ApePackImportScreen extends Screen {
         }
 
         if (!importComplete) {
-            // Progress bar
+            // Progress bar using blitSprite with Minecraft widget sprites
             int barX = centerX - 100;
             int barY = startY + 50;
             int barWidth = 200;
             int barHeight = 12;
 
-            // Background
-            guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0x404040);
+            // Draw background (empty progress bar track)
+            Identifier progressBg = Identifier.parse("minecraft:widget/progress");
+            guiGraphics.blitSprite(null, progressBg, barX, barY, barWidth, barHeight);
 
-            // Fill
+            // Draw progress fill (scaled by progress 0.0 to 1.0)
             if (totalFiles > 0) {
-                int fillWidth = (int) ((filesProcessed / (float) totalFiles) * barWidth);
-                guiGraphics.fill(barX, barY, barX + fillWidth, barY + barHeight, 0x55AAFF);
+                double progress = (double) filesProcessed / totalFiles;
+                int filledWidth = (int) (barWidth * progress);
+                if (filledWidth > 0) {
+                    Identifier progressFill = Identifier.parse("minecraft:widget/progress");
+                    guiGraphics.blitSprite(null, progressFill, barX, barY, filledWidth, barHeight);
+                }
             }
-
-            // Border
-            guiGraphics.fill(barX, barY, barX + barWidth, barY, 0x888888);
-            guiGraphics.fill(barX, barY + barHeight - 1, barX + barWidth, barY + barHeight, 0x888888);
-            guiGraphics.fill(barX, barY, barX, barY + barHeight, 0x888888);
-            guiGraphics.fill(barX + barWidth - 1, barY, barX + barWidth, barY + barHeight, 0x888888);
 
             // Progress text - show "Preparing..." when total is still 0
             if (totalFiles > 0) {

@@ -2,6 +2,18 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.17] - 2026-11-07
+
+### Fixed
+- **Multiple .apepack installations** — Added SHA-256 based tracking of processed .apepack files so the same update is never installed twice on subsequent game startups. Processed hashes are stored in `config/processed_apepacks.json`
+- **No installation completion notification** — The import progress screen now shows a clear completion message and marks the .apepack as processed, deletes the file, and updates the modpack version in the config
+- **Progress bar rendering** — Replaced custom `fill()` based progress bar with Minecraft's native `blitSprite` using `OverlayElement` sprites (BACKGROUND_SPRITE for the bar background, FILLED_SPRITE for the progress fill)
+
+### Changed
+- **Default config creation** — Config now includes a `modpackVersion` field that defaults to `v0.0` on first run. When an .apepack is installed, the modpack version is automatically updated to match the .apepack's version
+- **Startup .apepack scan** — Now skips already-processed .apepack files and only shows the import screen for new, unprocessed files
+- **Import screen completion flow** — After successful import, the screen marks the .apepack as processed, updates the modpack version, deletes the .apepack file, and shows the restart prompt
+
 ## [0.0.16] - 2026-11-07
 
 ### Fixed

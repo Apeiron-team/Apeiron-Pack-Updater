@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
@@ -34,6 +35,73 @@ public class ApePackLoader {
 
     private static final String APEPACK_MANIFEST = "apepack.json";
     private static final String MODS_MANIFEST = "manifest.json";
+    private static final Path PROCESSED_HASHES_PATH = Paths.get("config", "processed_apepacks.json");
+
+    /**
+     * Loads the set of already-processed .apepack file hashes.
+     */
+    private static Set<String> loadProcessedHashes() {
+        Set<String> hashes = new HashSet<>();
+        try {
+            if (Files.exists(PROCESSED_HASHES_PATH)) {
+                String content = Files.readString(PROCESSED_HASHES_PATH);
+                com.google.gson.JsonArray array = com.google.gson.JsonParser.parseString(content).getAsJsonArray();
+                for (com.google.gson.JsonElement elem : array) {
+                    hashes.add(elem.getAsString());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to load processed hashes: " + e.getMessage());
+        }
+        return hashes;
+    }
+
+    /**
+     * Saves the set of processed .apepack file hashes.
+     */
+    private static void saveProcessedHashes(Set<String> hashes) {
+        try {
+            Files.createDirectories(PROCESSED_HASHES_PATH.getParent());
+            com.google.gson.JsonArray array = new com.google.gson.JsonArray();
+            for (String hash : hashes) {
+                array.add(hash);
+            }
+            Files.writeString(PROCESSED_HASHES_PATH, array.toString());
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to save processed hashes: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Checks if an .apepack file has already been processed based on its SHA-256 hash.
+     */
+    public static boolean isApePackAlreadyProcessed(Path apepackFile) {
+        try {
+            String hash = computeSha256(apepackFile);
+            if (hash == null) return false;
+            Set<String> hashes = loadProcessedHashes();
+            return hashes.contains(hash);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Marks an .apepack file as processed by storing its SHA-256 hash.
+     */
+    public static void markApePackAsProcessed(Path apepackFile) {
+        try {
+            String hash = computeSha256(apepackFile);
+            if (hash != null) {
+                Set<String> hashes = loadProcessedHashes();
+                hashes.add(hash);
+                saveProcessedHashes(hashes);
+                System.out.println("[PackUpdater] Marked .apepack as processed: " + apepackFile.getFileName());
+            }
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to mark .apepack as processed: " + e.getMessage());
+        }
+    }
 
     /**
      * Files that must never be overwritten during installation (user settings).
@@ -285,11 +353,19 @@ public class ApePackLoader {
         }
 
         // Install all found .apepack files
+        int processedCount = 0;
         for (Path apepackFile : apepackFiles) {
+            // Skip already-processed .apepack files
+            if (isApePackAlreadyProcessed(apepackFile)) {
+                System.out.println("[PackUpdater] Skipping already-processed .apepack: " + apepackFile.getFileName());
+                continue;
+            }
+
             System.out.println("[PackUpdater] Found .apepack file: " + apepackFile.getFileName());
             try {
                 InstallResult result = installApePack(apepackFile, instanceRoot);
                 if (result.success) {
+                    processedCount++;
                     System.out.println("[PackUpdater] Installed " + result.newFilesInstalled +
                             " new file(s), skipped " + result.skippedDuplicates +
                             " duplicate(s), protected " + result.skippedProtected + " user setting(s)");
@@ -299,9 +375,13 @@ public class ApePackLoader {
                     System.out.println("[PackUpdater] Mods: " + result.packInfo.modCount +
                             ", Configs: " + result.packInfo.configCount +
                             ", Scripts: " + result.packInfo.scriptCount);
+                    // Mark as processed so it won't be installed again on next startup
+                    markApePackAsProcessed(apepackFile);
                     // Remove the .apepack file after successful install
                     Files.delete(apepackFile);
                     System.out.println("[PackUpdater] Removed processed .apepack file");
+                    // Update the modpack version in the config
+                    ConfigManager.updateModpackVersion(result.packInfo.packVersion);
                 } else {
                     System.err.println("[PackUpdater] Failed to install " + apepackFile.getFileName() +
                             ": " + result.errorMessage);
@@ -310,6 +390,9 @@ public class ApePackLoader {
                 System.err.println("[PackUpdater] Error processing " + apepackFile.getFileName() +
                         ": " + e.getMessage());
             }
+        }
+        if (processedCount > 0) {
+            System.out.println("[PackUpdater] Processed " + processedCount + " new .apepack file(s)");
         }
     }
 
