@@ -2,6 +2,23 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.20] - 2026-11-07
+
+### Fixed
+- **GitHub API rate limit error** — All GitHub API calls now use the proper `Accept: application/vnd.github.v3+json` header required by GitHub's API. Without this header, GitHub may return HTML or reject the request, causing 403 errors
+- **API rate limit exceeded (403)** — Added optional GitHub personal access token field in the config screen. With a token, the API rate limit increases from 60 to 5,000 requests per hour. Token is saved in the config and used for all API calls
+- **Unclear error messages** — When a 403 rate limit error occurs, the mod now shows a clear message explaining the issue and directing the user to add a GitHub token at https://github.com/settings/tokens
+
+### Added
+- **GitHub Token field** — New input field in the config screen under the GitHub Repo field. Enter a personal access token to increase API rate limits. The token is saved in `config/globalpackupdater.json` and used for all GitHub API requests
+- **`ConfigManager.setupGitHubConnection()`** — Centralized method that sets up all required headers for GitHub API calls (Accept, User-Agent, and optional Authorization). All API calls now use this method instead of setting headers individually
+
+### Changed
+- Config screen layout adjusted to accommodate the new GitHub Token field
+- The `resize()` method now preserves the token field value during window resizes
+- Config save/load now includes the `githubToken` field
+- All GitHub API calls in `PackUpdaterMod.java` and `PackUpdaterConfigScreen.java` now use `ConfigManager.setupGitHubConnection()` for consistent header setup
+
 ## [0.0.19] - 2026-11-07
 
 ### Fixed

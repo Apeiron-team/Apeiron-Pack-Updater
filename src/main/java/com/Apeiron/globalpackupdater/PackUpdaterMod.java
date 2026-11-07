@@ -190,10 +190,15 @@ public class PackUpdaterMod {
         URL url = URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+        ConfigManager.setupGitHubConnection(conn);
         conn.setConnectTimeout(3000);
 
-        if (conn.getResponseCode() != 200) return false;
+        if (conn.getResponseCode() != 200) {
+            if (conn.getResponseCode() == 403) {
+                System.err.println("[PackUpdater] GitHub API rate limit exceeded. Add a GitHub token in the config to increase your limit.");
+            }
+            return false;
+        }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         com.google.gson.JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
@@ -265,10 +270,15 @@ public class PackUpdaterMod {
         URL url = URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+        ConfigManager.setupGitHubConnection(conn);
         conn.setConnectTimeout(5000);
 
-        if (conn.getResponseCode() != 200) return null;
+        if (conn.getResponseCode() != 200) {
+            if (conn.getResponseCode() == 403) {
+                System.err.println("[PackUpdater] GitHub API rate limit exceeded. Add a GitHub token in the config to increase your limit.");
+            }
+            return null;
+        }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         JsonObject release = JsonParser.parseReader(reader).getAsJsonObject();
@@ -294,7 +304,7 @@ public class PackUpdaterMod {
         URL url = URI.create(downloadUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+        ConfigManager.setupGitHubConnection(conn);
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(60000);
 
@@ -318,7 +328,7 @@ public class PackUpdaterMod {
             URL url = URI.create(downloadUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+            ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(60000);
 
@@ -370,7 +380,7 @@ public class PackUpdaterMod {
             URL url = URI.create(apepackUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+            ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(120000);
 
@@ -427,10 +437,15 @@ public class PackUpdaterMod {
         URL url = URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
-        conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+        ConfigManager.setupGitHubConnection(conn);
         conn.setConnectTimeout(5000);
 
-        if (conn.getResponseCode() != 200) return null;
+        if (conn.getResponseCode() != 200) {
+            if (conn.getResponseCode() == 403) {
+                System.err.println("[PackUpdater] GitHub API rate limit exceeded. Add a GitHub token in the config to increase your limit.");
+            }
+            return null;
+        }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
         JsonObject release = JsonParser.parseReader(reader).getAsJsonObject();

@@ -28,6 +28,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
     private Button channelButton;
     private EditBox urlField;
+    private EditBox tokenField;
     private Button checkButton;
     private Component statusText = Component.literal("");
 
@@ -84,12 +85,16 @@ public class PackUpdaterConfigScreen extends Screen {
             URL url = URI.create(apiUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+            ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(10000);
 
             if (conn.getResponseCode() != 200) {
-                return new UpdateCheckResult(false, "GitHub API error: " + conn.getResponseCode(), null, false);
+                String errorMsg = "GitHub API error: " + conn.getResponseCode();
+                if (conn.getResponseCode() == 403) {
+                    errorMsg = "GitHub API rate limit exceeded!\nAdd a GitHub token below to increase your limit to 5,000 requests/hour.\nGet one at: https://github.com/settings/tokens";
+                }
+                return new UpdateCheckResult(false, errorMsg, null, false);
             }
 
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -165,11 +170,13 @@ public class PackUpdaterConfigScreen extends Screen {
 
     private void checkAvailableChannels() {
         try {
+            // Save config first so the GitHub token is available
+            ConfigManager.saveConfig();
             String apiUrl = "https://api.github.com/repos/" + ConfigManager.repo + "/releases";
             URL url = URI.create(apiUrl).toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
+            ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(3000);
 
             if (conn.getResponseCode() == 200) {
@@ -234,6 +241,7 @@ public class PackUpdaterConfigScreen extends Screen {
         super.resize(width, height);
         // Preserve user input before rebuilding widgets
         String urlValue = this.urlField != null ? this.urlField.getValue() : "";
+        String tokenValue = this.tokenField != null ? this.tokenField.getValue() : "";
         String packNameValue = this.packNameField != null ? this.packNameField.getValue() : "";
         String packVersionValue = this.packVersionField != null ? this.packVersionField.getValue() : "";
 
@@ -241,6 +249,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Restore user input after rebuilding
         if (this.urlField != null) this.urlField.setValue(urlValue);
+        if (this.tokenField != null) this.tokenField.setValue(tokenValue);
         if (this.packNameField != null) this.packNameField.setValue(packNameValue);
         if (this.packVersionField != null) this.packVersionField.setValue(packVersionValue);
     }
@@ -256,7 +265,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // ===================== UPDATE SECTION =====================
         int updatePanelY = startY;
-        int updatePanelHeight = 130;
+        int updatePanelHeight = 160;
 
         // URL input field
         this.urlField = new EditBox(this.font, panelX + 20, updatePanelY + 30, panelWidth - 40, 20, Component.literal("GitHub Repo"));
@@ -271,11 +280,21 @@ public class PackUpdaterConfigScreen extends Screen {
         });
         this.addRenderableWidget(this.urlField);
 
+        // GitHub Token field (optional, for higher API rate limits)
+        this.tokenField = new EditBox(this.font, panelX + 20, updatePanelY + 55, panelWidth - 40, 20, Component.literal("GitHub Token"));
+        this.tokenField.setMaxLength(Integer.MAX_VALUE);
+        this.tokenField.setHint(Component.literal("Optional: increases API limit to 5,000/hr"));
+        this.tokenField.setValue(ConfigManager.githubToken);
+        this.tokenField.setResponder(text -> {
+            ConfigManager.githubToken = text.trim();
+        });
+        this.addRenderableWidget(this.tokenField);
+
         // Check for Update button
         this.checkButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Check for Update"),
                 button -> handleCheckForUpdate()
-        ).bounds(panelX + 20, updatePanelY + 60, panelWidth - 40, 20).build());
+        ).bounds(panelX + 20, updatePanelY + 80, panelWidth - 40, 20).build());
 
         // Channel cycling button
         this.channelButton = this.addRenderableWidget(Button.builder(
@@ -284,13 +303,13 @@ public class PackUpdaterConfigScreen extends Screen {
                     cycleChannel();
                     button.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
                 }
-        ).bounds(panelX + 20, updatePanelY + 85, panelWidth / 2 - 10, 20).build());
+        ).bounds(panelX + 20, updatePanelY + 105, panelWidth / 2 - 10, 20).build());
 
         // Version info button (read-only display)
         this.addRenderableWidget(Button.builder(
                 Component.literal("v" + ConfigManager.CURRENT_VERSION),
                 button -> {}
-        ).bounds(panelX + panelWidth / 2 + 10, updatePanelY + 85, panelWidth / 2 - 10, 20)
+        ).bounds(panelX + panelWidth / 2 + 10, updatePanelY + 105, panelWidth / 2 - 10, 20)
                 .build());
 
         // ===================== GENERATE SECTION =====================
@@ -366,6 +385,8 @@ public class PackUpdaterConfigScreen extends Screen {
         if (ConfigManager.lastReleaseUrl == null || !ConfigManager.lastReleaseUrl.equals(input)) {
             ConfigManager.lastReleaseUrl = input;
         }
+        // Save config so the GitHub token is available for API calls
+        ConfigManager.saveConfig();
 
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
 
