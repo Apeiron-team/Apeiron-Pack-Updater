@@ -2,6 +2,23 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.8] - 2026-11-07
+
+### Fixed
+- Import progress screen showing a black screen instead of the progress bar and file names — the background was nearly opaque black (`0xF0000000`) with no visible text until the import thread started processing
+- No feedback shown while waiting for the import thread to begin — screen appeared completely blank
+
+### Changed
+- Import screen background changed from near-opaque black to semi-transparent dark gray (`0xCC000000`) so text is always visible
+- Constructor now initializes the current file name with the `.apepack` filename so it displays immediately on screen open
+- Progress text shows "Preparing..." when total file count is still 0, instead of showing "0 / 0 files"
+- Pack name no longer shows "Loading..." as a placeholder — only displays real pack info once received
+- File status label changed from "Installing:" to "Processing:" for clarity during initial load
+
+### Details
+- The import screen now shows meaningful content from the moment it opens: the `.apepack` filename, a "Preparing..." status, and live import counts
+- Once the import thread starts processing, the progress bar fills and file names update in real time
+
 ## [0.0.7] - 2026-11-07
 
 ### Fixed

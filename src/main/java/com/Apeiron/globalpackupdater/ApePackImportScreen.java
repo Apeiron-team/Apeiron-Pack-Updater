@@ -42,6 +42,8 @@ public class ApePackImportScreen extends Screen {
         this.parent = parent;
         this.apepackFile = apepackFile;
         this.instanceRoot = instanceRoot;
+        // Show file name immediately so the screen isn't blank
+        this.currentFile = apepackFile.getFileName().toString();
     }
 
     @Override
@@ -164,8 +166,8 @@ public class ApePackImportScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw background
-        guiGraphics.fill(0, 0, this.width, this.height, 0xF0000000);
+        // Draw background - use proper dark gray so text is visible
+        guiGraphics.fill(0, 0, this.width, this.height, 0xCC000000);
 
         int centerX = this.width / 2;
         int startY = this.height / 6;
@@ -182,7 +184,7 @@ public class ApePackImportScreen extends Screen {
         }
 
         // Pack name and version
-        if (!packName.isEmpty()) {
+        if (!packName.isEmpty() && !packName.equals("Loading...")) {
             guiGraphics.centeredText(this.font, packName + " v" + packVersion, centerX, startY + 20, 0xCCCCCC);
         }
 
@@ -208,14 +210,18 @@ public class ApePackImportScreen extends Screen {
             guiGraphics.fill(barX, barY, barX, barY + barHeight, 0x888888);
             guiGraphics.fill(barX + barWidth - 1, barY, barX + barWidth, barY + barHeight, 0x888888);
 
-            // Progress text
-            String progressText = filesProcessed + " / " + totalFiles + " files";
-            guiGraphics.centeredText(this.font, progressText, centerX, barY + barHeight + 10, 0xFFFFFF);
+            // Progress text - show "Preparing..." when total is still 0
+            if (totalFiles > 0) {
+                String progressText = filesProcessed + " / " + totalFiles + " files";
+                guiGraphics.centeredText(this.font, progressText, centerX, barY + barHeight + 10, 0xFFFFFF);
+            } else {
+                guiGraphics.centeredText(this.font, "Preparing...", centerX, barY + barHeight + 10, 0xAAAAAA);
+            }
 
-            // Current file being processed
+            // Current file being processed - always show the .apepack file name at minimum
             if (!currentFile.isEmpty()) {
                 String typeLabel = currentFileType.isEmpty() ? "" : " (" + currentFileType + ")";
-                guiGraphics.centeredText(this.font, "Installing: " + currentFile + typeLabel, centerX, barY + barHeight + 30, 0xAAAAAA);
+                guiGraphics.centeredText(this.font, "Processing: " + currentFile + typeLabel, centerX, barY + barHeight + 30, 0xAAAAAA);
             }
 
             // Live counts
