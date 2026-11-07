@@ -2,6 +2,27 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.9] - 2026-11-07
+
+### Fixed
+- File picker mouse scroll wheel not working — scrolling would immediately reset to the top because `refreshFiles()` reset `scrollOffset` to zero on every scroll event
+- Scrollbar was not interactive — could not click or drag the scrollbar to navigate the file list
+
+### Added
+- Mouse wheel scrolling in the file picker panel — scroll up and down to browse files and folders
+- Interactive scrollbar on the right side of the file panel — click and drag to scroll, with visual hover and drag feedback
+- Scrollbar track with visible borders and a highlight on the thumb for better visibility
+
+### Changed
+- Separated `refreshFileButtons()` from `refreshFiles()` so scrolling only updates visible buttons without resetting the file list or scroll position
+- File buttons now account for scrollbar width to prevent overlap
+- Scrollbar uses solid colors with hover/drag states instead of semi-transparent invisible colors
+
+### Details
+- The scroll wheel moves one row per notch for precise navigation
+- The scrollbar thumb changes color when hovered (lighter gray) or dragged (brightest)
+- A subtle white highlight on the left edge of the thumb gives it a 3D appearance
+
 ## [0.0.8] - 2026-11-07
 
 ### Fixed

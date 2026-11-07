@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.io.File;
@@ -39,6 +40,12 @@ public class ApePackFilePicker extends Screen {
     private int panelLeft = 20;
     private int panelWidth = 0;
     private static final int ROW_HEIGHT = 22;
+    private static final int SCROLLBAR_WIDTH = 8;
+
+    // Scrollbar interaction
+    private boolean draggingScrollbar = false;
+    private int dragStartY = 0;
+    private int dragScrollOffset = 0;
 
     // Track file buttons for removal
     private List<Button> fileButtons = new ArrayList<>();
@@ -169,6 +176,9 @@ public class ApePackFilePicker extends Screen {
     }
 
     private void refreshFiles() {
+        // Save scroll offset before clearing
+        int savedScrollOffset = 0;
+        
         // Remove old file buttons
         for (Button btn : this.fileButtons) {
             this.removeWidget(btn);
@@ -218,6 +228,17 @@ public class ApePackFilePicker extends Screen {
         this.pathField.setValue(this.currentDir.getAbsolutePath());
 
         // Add buttons for each file with visible names
+        refreshFileButtons();
+    }
+
+    // Refresh only the file buttons without resetting scroll or selected file
+    private void refreshFileButtons() {
+        // Remove old file buttons
+        for (Button btn : this.fileButtons) {
+            this.removeWidget(btn);
+        }
+        this.fileButtons.clear();
+
         int visibleRows = this.panelHeight / ROW_HEIGHT;
         int startIndex = this.scrollOffset / ROW_HEIGHT;
         for (int i = 0; i < visibleRows + 1 && startIndex + i < this.files.size(); i++) {
@@ -244,7 +265,7 @@ public class ApePackFilePicker extends Screen {
                             this.selectedFile = finalInfo.file;
                         }
                     }
-            ).bounds(this.panelLeft + 2, y + 1, this.panelWidth - 4, ROW_HEIGHT - 2).build();
+            ).bounds(this.panelLeft + 2, y + 1, this.panelWidth - SCROLLBAR_WIDTH - 4, ROW_HEIGHT - 2).build();
             this.addRenderableWidget(fileButton);
             this.fileButtons.add(fileButton);
         }
@@ -256,12 +277,63 @@ public class ApePackFilePicker extends Screen {
         if (mouseX >= this.panelLeft && mouseX <= this.panelLeft + this.panelWidth &&
             mouseY >= this.panelTop && mouseY <= this.panelTop + this.panelHeight) {
             int maxScroll = Math.max(0, this.files.size() * ROW_HEIGHT - this.panelHeight);
-            this.scrollOffset = Math.max(0, Math.min((int)(this.scrollOffset - scrollY * 20), maxScroll));
-            // Refresh file buttons for new visible area
-            refreshFiles();
+            this.scrollOffset = Math.max(0, Math.min((int)(this.scrollOffset - scrollY * ROW_HEIGHT), maxScroll));
+            // Refresh only the file buttons, not the entire file list
+            refreshFileButtons();
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        // Check if clicking on the scrollbar
+        if (event.buttonInfo().isLeft()) {
+            double mouseX = event.x();
+            double mouseY = event.y();
+            int totalContentHeight = this.files.size() * ROW_HEIGHT;
+            if (totalContentHeight > this.panelHeight) {
+                int maxScroll = totalContentHeight - this.panelHeight;
+                int scrollbarX = this.panelLeft + this.panelWidth - SCROLLBAR_WIDTH;
+                int scrollbarHeight = Math.max(20, (this.panelHeight * this.panelHeight) / totalContentHeight);
+                int scrollbarY = this.panelTop + (int)((this.scrollOffset * (this.panelHeight - scrollbarHeight)) / maxScroll);
+
+                if (mouseX >= scrollbarX && mouseX <= scrollbarX + SCROLLBAR_WIDTH &&
+                    mouseY >= this.panelTop && mouseY <= this.panelTop + this.panelHeight) {
+                    draggingScrollbar = true;
+                    dragStartY = (int) mouseY;
+                    dragScrollOffset = this.scrollOffset;
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (event.buttonInfo().isLeft() && draggingScrollbar) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(event);
+    }
+
+    @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        if (draggingScrollbar) {
+            int totalContentHeight = this.files.size() * ROW_HEIGHT;
+            int maxScroll = totalContentHeight - this.panelHeight;
+            int scrollbarHeight = Math.max(20, (this.panelHeight * this.panelHeight) / totalContentHeight);
+            int panelUsableHeight = this.panelHeight - scrollbarHeight;
+
+            int deltaY = (int) mouseY - dragStartY;
+            int scrollDelta = (int)((deltaY * maxScroll) / panelUsableHeight);
+
+            this.scrollOffset = Math.max(0, Math.min(dragScrollOffset + scrollDelta, maxScroll));
+            refreshFileButtons();
+        }
+        super.mouseMoved(mouseX, mouseY);
     }
 
     @Override
@@ -314,15 +386,32 @@ public class ApePackFilePicker extends Screen {
         int totalContentHeight = this.files.size() * ROW_HEIGHT;
         if (totalContentHeight > this.panelHeight) {
             int maxScroll = totalContentHeight - this.panelHeight;
-            int scrollbarWidth = 8;
-            int scrollbarX = this.panelLeft + this.panelWidth - scrollbarWidth;
+            int scrollbarX = this.panelLeft + this.panelWidth - SCROLLBAR_WIDTH;
             int scrollbarHeight = Math.max(20, (this.panelHeight * this.panelHeight) / totalContentHeight);
             int scrollbarY = this.panelTop + (int)((this.scrollOffset * (this.panelHeight - scrollbarHeight)) / maxScroll);
 
-            // Scrollbar background
-            guiGraphics.fill(scrollbarX, this.panelTop, scrollbarX + scrollbarWidth, this.panelTop + this.panelHeight, 0x40000000);
-            // Scrollbar thumb
-            guiGraphics.fill(scrollbarX, scrollbarY, scrollbarX + scrollbarWidth, scrollbarY + scrollbarHeight, 0x80808080);
+            // Check if mouse is hovering over the scrollbar thumb
+            boolean scrollbarHovered = mouseX >= scrollbarX && mouseX <= scrollbarX + SCROLLBAR_WIDTH &&
+                    mouseY >= scrollbarY && mouseY <= scrollbarY + scrollbarHeight;
+
+            // Scrollbar track background (darker groove)
+            guiGraphics.fill(scrollbarX, this.panelTop, scrollbarX + SCROLLBAR_WIDTH, this.panelTop + this.panelHeight, 0x60000000);
+            // Scrollbar track border
+            guiGraphics.fill(scrollbarX, this.panelTop, scrollbarX + 1, this.panelTop + this.panelHeight, 0x40404040);
+            guiGraphics.fill(scrollbarX + SCROLLBAR_WIDTH - 1, this.panelTop, scrollbarX + SCROLLBAR_WIDTH, this.panelTop + this.panelHeight, 0x40404040);
+
+            // Scrollbar thumb - brighter when hovered or dragging
+            int thumbColor;
+            if (draggingScrollbar) {
+                thumbColor = 0xFFAAAAAA;
+            } else if (scrollbarHovered) {
+                thumbColor = 0xFF888888;
+            } else {
+                thumbColor = 0xFF666666;
+            }
+            guiGraphics.fill(scrollbarX + 1, scrollbarY, scrollbarX + SCROLLBAR_WIDTH - 1, scrollbarY + scrollbarHeight, thumbColor);
+            // Thumb highlight
+            guiGraphics.fill(scrollbarX + 1, scrollbarY, scrollbarX + 2, scrollbarY + scrollbarHeight, 0x30FFFFFF);
         }
 
         // Selected file indicator
