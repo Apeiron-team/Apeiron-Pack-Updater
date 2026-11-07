@@ -2,6 +2,19 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.16] - 2026-11-07
+
+### Fixed
+- **Crash when exiting config during download** — Download state now lives in a global `DownloadManager` instead of the config screen's local variables, so exiting and re-entering the config screen no longer corrupts button state or crashes the game
+- **Download progress now visible globally** — A download progress panel with a real-time progress bar appears in the config screen showing percentage and MB downloaded/total, and the download continues even if you close the config screen
+
+### Changed
+- **Complete config screen redesign** — Styled panels with dark backgrounds, colored borders, section headers with emoji icons (🔄 Check for Updates, 📦 Generate .apepack, 📥 Import .apepack), and a cleaner layout
+- **Toast notifications improved** — Dark themed toasts with blue highlight borders and smooth fade in/out
+- **Version display** — Current mod version now shown as a read-only button next to the channel selector
+- **Download flow simplified** — "Check for Update" → "Download Update" button transition is now stable and survives screen close/reopen
+- **Download progress tracking** — `downloadLatestApePack` now reports byte-level progress to the global DownloadManager with content-length based percentage calculation
+
 ## [0.0.15] - 2026-11-07
 
 ### Changed

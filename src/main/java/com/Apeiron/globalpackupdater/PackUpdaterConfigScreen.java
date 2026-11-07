@@ -10,7 +10,6 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -44,39 +43,25 @@ public class PackUpdaterConfigScreen extends Screen {
     private int toastTimer = 0;
     private static final int TOAST_DURATION = 120; // 2 seconds at 60fps
 
-    // Update channel state
-    private String latestVersion = null;
-    private String currentVersion = ConfigManager.CURRENT_VERSION;
-    private boolean updateAvailable = false;
-
     public PackUpdaterConfigScreen(Screen parent) {
-        super(Component.literal("Global Pack Updater Settings"));
+        super(Component.literal("Apeiron Pack Updater"));
         this.parent = parent;
-        // Don't block the main thread in the constructor — check channels in init() instead
     }
 
     /**
      * Extracts a GitHub repo (user/repo) from a URL or direct repo string.
-     * Supports:
-     * - Full URLs: https://github.com/user/repo/releases/tag/v1.0.0
-     * - Short format: user/repo
-     * - With or without https:// prefix
      */
     private String extractRepoFromUrl(String input) {
         if (input == null || input.trim().isEmpty()) return null;
         String trimmed = input.trim();
-        
-        // If it's already a short repo format (user/repo), validate and return it
+
         if (trimmed.contains("/") && !trimmed.contains("github.com") && !trimmed.startsWith("http")) {
-            // Validate: should be two segments, no spaces, alphanumeric with hyphens/underscores
             Pattern shortPattern = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9._-]*(/[a-zA-Z0-9][a-zA-Z0-9._-]*)$");
             if (shortPattern.matcher(trimmed).matches()) {
                 return trimmed;
             }
         }
-        
-        // Match patterns like https://github.com/user/repo/releases/tag/v1.0.0
-        // or https://github.com/user/repo/releases/latest
+
         Pattern pattern = Pattern.compile("github\\.com\\/([^/]+)\\/([^/]+)");
         Matcher matcher = pattern.matcher(trimmed);
         if (matcher.find()) {
@@ -85,9 +70,6 @@ public class PackUpdaterConfigScreen extends Screen {
         return null;
     }
 
-    /**
-     * Shows a toast notification at the top of the screen.
-     */
     private void showToast(String message) {
         this.toastMessage = message;
         this.toastTimer = TOAST_DURATION;
@@ -118,41 +100,23 @@ public class PackUpdaterConfigScreen extends Screen {
                 return new UpdateCheckResult(false, "No releases found", null, false);
             }
 
-            // Find the latest release matching the channel
             for (JsonElement element : releases) {
                 JsonObject release = element.getAsJsonObject();
                 String tagName = release.get("tag_name").getAsString();
                 boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
 
-                // Match release based on channel filter
                 boolean match = false;
                 if (channel.equals("stable") && !isPrerelease) match = true;
                 else if (channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
                 else if (channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
-                // For stable, also accept the first non-prerelease
-                else if (channel.equals("stable") && !isPrerelease) match = true;
 
                 if (match) {
                     String cleanTag = tagName.replace("v", "").replace("V", "");
-                    boolean isNewer = compareVersions(cleanTag, currentVersion) > 0;
-                    
-                    // Check for .apepack asset
-                    boolean hasApepack = false;
-                    if (release.has("assets") && release.get("assets").isJsonArray()) {
-                        JsonArray assets = release.get("assets").getAsJsonArray();
-                        for (JsonElement asset : assets) {
-                            String name = asset.getAsJsonObject().get("name").getAsString();
-                            if (name.toLowerCase().endsWith(".apepack")) {
-                                hasApepack = true;
-                                break;
-                            }
-                        }
-                    }
-                    
+                    boolean isNewer = compareVersions(cleanTag, ConfigManager.CURRENT_VERSION) > 0;
                     return new UpdateCheckResult(true, "Latest version: " + tagName, cleanTag, isNewer);
                 }
             }
-            
+
             return new UpdateCheckResult(false, "No release found for channel: " + channel, null, false);
 
         } catch (Exception e) {
@@ -160,9 +124,6 @@ public class PackUpdaterConfigScreen extends Screen {
         }
     }
 
-    /**
-     * Compares two version strings. Returns positive if v1 > v2, negative if v1 < v2, 0 if equal.
-     */
     private int compareVersions(String v1, String v2) {
         if (v1 == null || v1.isEmpty()) return -1;
         if (v2 == null || v2.isEmpty()) return 1;
@@ -188,9 +149,6 @@ public class PackUpdaterConfigScreen extends Screen {
         return 0;
     }
 
-    /**
-     * Result of an update check operation.
-     */
     private static class UpdateCheckResult {
         final boolean success;
         final String message;
@@ -203,56 +161,6 @@ public class PackUpdaterConfigScreen extends Screen {
             this.version = version;
             this.updateAvailable = updateAvailable;
         }
-    }
-
-    private String extractDownloadUrl(String releaseUrl) {
-        // Given a release page URL, find the latest asset download URL
-        try {
-            // If it's a release page, get the assets from the API
-            String repo = extractRepoFromUrl(releaseUrl);
-            if (repo == null) return null;
-
-            // Determine if this is a specific release or latest
-            String tagName = null;
-            Pattern tagPattern = Pattern.compile("/tag/([^/]+)");
-            Matcher tagMatcher = tagPattern.matcher(releaseUrl);
-            if (tagMatcher.find()) {
-                tagName = tagMatcher.group(1);
-            }
-
-            String apiUrl;
-            if (tagName != null) {
-                apiUrl = "https://api.github.com/repos/" + repo + "/releases/tags/" + tagName;
-            } else {
-                apiUrl = "https://api.github.com/repos/" + repo + "/releases/latest";
-            }
-
-            URL url = URI.create(apiUrl).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("User-Agent", "NeoForge-PackUpdater");
-            conn.setConnectTimeout(5000);
-
-            if (conn.getResponseCode() == 200) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                JsonObject release = JsonParser.parseReader(reader).getAsJsonObject();
-                reader.close();
-
-                // Return the zipball_url or browser_download_url of the first asset
-                if (release.has("zipball_url")) {
-                    return release.get("zipball_url").getAsString();
-                }
-                if (release.has("assets") && release.get("assets").isJsonArray()) {
-                    JsonArray assets = release.get("assets").getAsJsonArray();
-                    if (assets.size() > 0) {
-                        return assets.get(0).getAsJsonObject().get("browser_download_url").getAsString();
-                    }
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
     }
 
     private void checkAvailableChannels() {
@@ -286,7 +194,6 @@ public class PackUpdaterConfigScreen extends Screen {
                 }
             }
         } catch (Exception e) {
-            // Default to stable if offline
             hasStable = true;
         }
     }
@@ -295,162 +202,80 @@ public class PackUpdaterConfigScreen extends Screen {
     protected void init() {
         super.init();
 
-        // Check available channels on a background thread so we don't block the UI
+        // Check available channels on a background thread
         Thread channelThread = new Thread(() -> {
             checkAvailableChannels();
             Minecraft.getInstance().execute(() -> {
-                // Update the channel button text after channels are detected
                 if (this.channelButton != null) {
-                    this.channelButton.setMessage(Component.literal("Update Channel: " + ConfigManager.channel.toUpperCase()));
+                    this.channelButton.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
                 }
             });
         }, "PackUpdater-Channels");
         channelThread.setDaemon(true);
         channelThread.start();
 
+        // Reset download manager if it was in a transient state from a previous session
+        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
+        if (dm.status == PackUpdaterMod.DownloadStatus.CHECKING || dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
+            dm.setIdle();
+        }
+
         int centerX = this.width / 2;
-        // Use fixed spacing instead of height/6 to ensure proper scaling at all GUI scales
+        int panelWidth = 340;
+        int panelX = centerX - panelWidth / 2;
         int startY = 50;
 
-        // URL input field - accepts full URLs or short repo names (user/repo)
-        this.urlField = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("GitHub Repo"));
-        this.urlField.setMaxLength(Integer.MAX_VALUE); // Allow very long GitHub usernames and URLs
+        // ===================== UPDATE SECTION =====================
+        int updatePanelY = startY;
+        int updatePanelHeight = 130;
+
+        // URL input field
+        this.urlField = new EditBox(this.font, panelX + 20, updatePanelY + 30, panelWidth - 40, 20, Component.literal("GitHub Repo"));
+        this.urlField.setMaxLength(Integer.MAX_VALUE);
+        this.urlField.setHint(Component.literal("user/repo or https://github.com/user/repo"));
+        this.urlField.setValue(ConfigManager.lastReleaseUrl != null ? ConfigManager.lastReleaseUrl : ConfigManager.repo);
         this.urlField.setResponder(text -> {
-            // Update repo config when URL changes
             String repo = extractRepoFromUrl(text);
             if (repo != null) {
                 ConfigManager.repo = repo;
             }
         });
-        this.urlField.setHint(Component.literal("user/repo or https://github.com/user/repo"));
-        this.urlField.setValue(ConfigManager.lastReleaseUrl != null ? ConfigManager.lastReleaseUrl : ConfigManager.repo);
         this.addRenderableWidget(this.urlField);
 
         // Check for Update button
         this.checkButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Check for Update"),
-                button -> {
-                    String input = this.urlField.getValue().trim();
-                    if (input.isEmpty()) {
-                        this.statusText = Component.literal("Please enter a GitHub repo (user/repo) or URL.");
-                        showToast("⚠️ Please enter a GitHub repo");
-                        return;
-                    }
+                button -> handleCheckForUpdate()
+        ).bounds(panelX + 20, updatePanelY + 60, panelWidth - 40, 20).build());
 
-                    String repo = extractRepoFromUrl(input);
-                    if (repo == null) {
-                        this.statusText = Component.literal("Invalid input. Use 'user/repo' or a GitHub URL.");
-                        showToast("⚠️ Invalid repo format");
-                        return;
-                    }
-
-                    ConfigManager.repo = repo;
-                    if (ConfigManager.lastReleaseUrl == null || !ConfigManager.lastReleaseUrl.equals(input)) {
-                        ConfigManager.lastReleaseUrl = input;
-                    }
-
-                    this.statusText = Component.literal("Checking for updates...");
-                    button.active = false;
-                    button.setMessage(Component.literal("Checking..."));
-
-                    // Run update check on a background thread
-                    Thread checkThread = new Thread(() -> {
-                        UpdateCheckResult result = checkForUpdates(repo, ConfigManager.channel);
-                        
-                        Minecraft.getInstance().execute(() -> {
-                            if (result.success) {
-                                this.latestVersion = result.version;
-                                this.updateAvailable = result.updateAvailable;
-                                
-                                if (result.updateAvailable) {
-                                    this.statusText = Component.literal("Update available! " + result.message);
-                                    showToast("🔄 Update available: v" + result.version);
-                                    
-                                    // Try to download .apepack automatically
-                                    button.setMessage(Component.literal("Download Update"));
-                                    button.active = true;
-                                    
-                                    // Change button behavior to download
-                                    this.removeWidget(checkButton);
-                                    this.checkButton = this.addRenderableWidget(Button.builder(
-                                            Component.literal("Download Update"),
-                                            btn -> {
-                                                this.statusText = Component.literal("Downloading update...");
-                                                btn.active = false;
-                                                btn.setMessage(Component.literal("Downloading..."));
-                                                
-                                                Thread downloadThread = new Thread(() -> {
-                                                    boolean apePackDownloaded = PackUpdaterMod.downloadLatestApePack(repo);
-                                                    Minecraft.getInstance().execute(() -> {
-                                                        if (apePackDownloaded) {
-                                                            this.statusText = Component.literal(".apepack saved to apepacks/ folder! Restart to extract and install.");
-                                                            showToast("✅ Update saved! Restart to extract.");
-                                                        } else {
-                                                            this.statusText = Component.literal("No .apepack found. Trying zip...");
-                                                            String downloadUrl = extractDownloadUrl("https://github.com/" + repo + "/releases/latest");
-                                                            if (downloadUrl != null) {
-                                                                PackUpdaterMod.downloadAndPrepareUpdate(downloadUrl);
-                                                                this.statusText = Component.literal("Update prepared! Restart to apply.");
-                                                                showToast("✅ Update prepared! Restart to apply.");
-                                                            } else {
-                                                                this.statusText = Component.literal("No update assets found.");
-                                                                showToast("❌ No update assets found");
-                                                            }
-                                                        }
-                                                        btn.active = true;
-                                                        btn.setMessage(Component.literal("Check for Update"));
-                                                        
-                                                        // Reset to check button
-                                                        this.removeWidget(checkButton);
-                                                        this.checkButton = this.addRenderableWidget(Button.builder(
-                                                                Component.literal("Check for Update"),
-                                                                b -> {} // Will be replaced on next init
-                                                        ).bounds(centerX - 100, startY + 30, 200, 20).build());
-                                                    });
-                                                }, "PackUpdater-Download");
-                                                downloadThread.setDaemon(true);
-                                                downloadThread.start();
-                                            }
-                                    ).bounds(centerX - 100, startY + 30, 200, 20).build());
-                                } else {
-                                    this.statusText = Component.literal("You're up to date! " + result.message);
-                                    showToast("✅ You're up to date!");
-                                    button.active = true;
-                                    button.setMessage(Component.literal("Check for Update"));
-                                }
-                            } else {
-                                this.statusText = Component.literal(result.message);
-                                showToast("❌ " + result.message);
-                                button.active = true;
-                                button.setMessage(Component.literal("Check for Update"));
-                            }
-                        });
-                    }, "PackUpdater-Check");
-                    checkThread.setDaemon(true);
-                    checkThread.start();
-                }
-        ).bounds(centerX - 100, startY + 30, 200, 20).build());
-
-        // Channel cycling button (dynamically reflects current selection)
+        // Channel cycling button
         this.channelButton = this.addRenderableWidget(Button.builder(
-                Component.literal("Update Channel: " + ConfigManager.channel.toUpperCase()),
+                Component.literal("Channel: " + ConfigManager.channel.toUpperCase()),
                 button -> {
                     cycleChannel();
-                    button.setMessage(Component.literal("Update Channel: " + ConfigManager.channel.toUpperCase()));
+                    button.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
                 }
-        ).bounds(centerX - 100, startY + 60, 200, 20).build());
+        ).bounds(panelX + 20, updatePanelY + 85, panelWidth / 2 - 10, 20).build());
 
-        // Generate .apepack section - use relative positioning from startY
-        int genY = startY + 120;
+        // Version info button (read-only display)
+        this.addRenderableWidget(Button.builder(
+                Component.literal("v" + ConfigManager.CURRENT_VERSION),
+                button -> {}
+        ).bounds(panelX + panelWidth / 2 + 10, updatePanelY + 85, panelWidth / 2 - 10, 20)
+                .build());
+
+        // ===================== GENERATE SECTION =====================
+        int genPanelY = updatePanelY + updatePanelHeight + 10;
+        int genPanelHeight = 120;
 
         // Pack name field
-        this.packNameField = new EditBox(this.font, centerX - 100, genY, 200, 20, Component.literal("Pack Name"));
+        this.packNameField = new EditBox(this.font, panelX + 20, genPanelY + 30, panelWidth - 40, 20, Component.literal("Pack Name"));
         this.packNameField.setHint(Component.literal("My Modpack"));
         this.packNameField.setValue("V++ (high Q)");
         this.addRenderableWidget(this.packNameField);
 
         // Pack version field
-        this.packVersionField = new EditBox(this.font, centerX - 100, genY + 25, 200, 20, Component.literal("Pack Version"));
+        this.packVersionField = new EditBox(this.font, panelX + 20, genPanelY + 55, panelWidth - 40, 20, Component.literal("Pack Version"));
         this.packVersionField.setHint(Component.literal("1.0.0"));
         this.packVersionField.setValue("1.0.0");
         this.addRenderableWidget(this.packVersionField);
@@ -458,89 +283,17 @@ public class PackUpdaterConfigScreen extends Screen {
         // Generate button
         this.generateButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Generate .apepack"),
-                button -> {
-                    String packName = this.packNameField.getValue().trim();
-                    String packVersion = this.packVersionField.getValue().trim();
+                button -> handleGenerateApePack()
+        ).bounds(panelX + 20, genPanelY + 85, panelWidth - 40, 20).build());
 
-                    if (packName.isEmpty()) {
-                        this.statusText = Component.literal("Please enter a pack name.");
-                        return;
-                    }
-                    if (packVersion.isEmpty()) {
-                        this.statusText = Component.literal("Please enter a pack version.");
-                        return;
-                    }
+        // ===================== IMPORT SECTION =====================
+        int importPanelY = genPanelY + genPanelHeight + 10;
 
-                    this.statusText = Component.literal("Generating .apepack file...");
-                    button.active = false;
-                    button.setMessage(Component.literal("Generating..."));
-
-                    // Run generation on a background thread
-                    Thread genThread = new Thread(() -> {
-                        try {
-                            java.nio.file.Path instanceRoot = java.nio.file.Paths.get(".");
-                            java.nio.file.Path outputFile = instanceRoot.resolve("generated_" + packName.replace(" ", "_") + "_" + packVersion + ".apepack");
-
-                            // Get Minecraft version
-                            String mcVersion = "26.1.2";
-
-                            ApePackGenerator.GenerateResult result = ApePackGenerator.generate(
-                                    instanceRoot, outputFile, packName, packVersion, mcVersion);
-
-                            Minecraft.getInstance().execute(() -> {
-                                if (result.success) {
-                                    this.statusText = Component.literal(
-                                            ".apepack generated! " + result.modCount + " mods, " +
-                                            result.configCount + " configs, " + result.scriptCount + " scripts. Saved to: " +
-                                            outputFile.getFileName());
-                                    showToast("✅ .apepack generated: " + outputFile.getFileName());
-                                    
-                                    // After generation, check for updates if repo is configured
-                                    if (ConfigManager.repo != null && !ConfigManager.repo.isEmpty()) {
-                                        Thread updateCheckThread = new Thread(() -> {
-                                            UpdateCheckResult updateResult = checkForUpdates(ConfigManager.repo, ConfigManager.channel);
-                                            Minecraft.getInstance().execute(() -> {
-                                                if (updateResult.success && updateResult.updateAvailable) {
-                                                    showToast("🔄 Update available: v" + updateResult.version);
-                                                } else if (updateResult.success) {
-                                                    showToast("✅ Pack up to date!");
-                                                }
-                                            });
-                                        }, "PackUpdater-PostGenCheck");
-                                        updateCheckThread.setDaemon(true);
-                                        updateCheckThread.start();
-                                    }
-                                } else {
-                                    this.statusText = Component.literal("Error: " + result.errorMessage);
-                                    showToast("❌ Generation failed: " + result.errorMessage);
-                                }
-                                button.active = true;
-                                button.setMessage(Component.literal("Generate .apepack"));
-                            });
-                        } catch (Exception e) {
-                            Minecraft.getInstance().execute(() -> {
-                                this.statusText = Component.literal("Error: " + e.getMessage());
-                                showToast("❌ Error: " + e.getMessage());
-                                button.active = true;
-                                button.setMessage(Component.literal("Generate .apepack"));
-                            });
-                        }
-                    }, "PackUpdater-Generate");
-                    genThread.setDaemon(true);
-                    genThread.start();
-                }
-        ).bounds(centerX - 100, genY + 55, 200, 20).build());
-
-        // Import .apepack section
-        int importY = genY + 85;
-
-        // Browse .apepack button - opens the file picker window
+        // Browse .apepack button
         this.browseButton = this.addRenderableWidget(Button.builder(
                 Component.literal("Browse .apepack"),
                 button -> {
-                    // Open the file picker screen
                     ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
-                        // File selected callback - launch the import screen
                         Path instanceRoot = java.nio.file.Paths.get(".");
                         ApePackImportScreen importScreen = new ApePackImportScreen(this, selectedPath, instanceRoot);
                         this.minecraft.setScreen(importScreen);
@@ -548,9 +301,16 @@ public class PackUpdaterConfigScreen extends Screen {
                     });
                     this.minecraft.setScreen(filePicker);
                 }
-        ).bounds(centerX - 100, importY + 5, 200, 20).build());
+        ).bounds(panelX + 20, importPanelY + 30, panelWidth - 40, 20).build());
 
-        // Done button - position at bottom of screen with padding
+        // ===================== DOWNLOAD PROGRESS SECTION =====================
+        // Only shown when a download is in progress
+        int progressPanelY = importPanelY + 60;
+        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
+            // Progress will be drawn in extractRenderState
+        }
+
+        // ===================== DONE BUTTON =====================
         this.addRenderableWidget(Button.builder(
                 Component.literal("Done"),
                 button -> {
@@ -560,9 +320,191 @@ public class PackUpdaterConfigScreen extends Screen {
         ).bounds(centerX - 100, this.height - 30, 200, 20).build());
     }
 
+    /**
+     * Handles the "Check for Update" button click — uses global DownloadManager.
+     */
+    private void handleCheckForUpdate() {
+        String input = this.urlField.getValue().trim();
+        if (input.isEmpty()) {
+            this.statusText = Component.literal("Please enter a GitHub repo.");
+            showToast("⚠️ Please enter a GitHub repo");
+            return;
+        }
+
+        String repo = extractRepoFromUrl(input);
+        if (repo == null) {
+            this.statusText = Component.literal("Invalid repo format. Use 'user/repo'.");
+            showToast("⚠️ Invalid repo format");
+            return;
+        }
+
+        ConfigManager.repo = repo;
+        if (ConfigManager.lastReleaseUrl == null || !ConfigManager.lastReleaseUrl.equals(input)) {
+            ConfigManager.lastReleaseUrl = input;
+        }
+
+        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
+
+        // If a download is already in progress, don't start another
+        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
+            this.statusText = Component.literal("Download already in progress...");
+            return;
+        }
+
+        this.statusText = Component.literal("Checking for updates...");
+        this.checkButton.active = false;
+        this.checkButton.setMessage(Component.literal("Checking..."));
+
+        Thread checkThread = new Thread(() -> {
+            dm.setChecking();
+            dm.currentRepo = repo;
+            UpdateCheckResult result = checkForUpdates(repo, ConfigManager.channel);
+
+            Minecraft.getInstance().execute(() -> {
+                this.checkButton.active = true;
+                this.checkButton.setMessage(Component.literal("Check for Update"));
+
+                if (result.success) {
+                    dm.latestVersion = result.version;
+                    dm.updateAvailable = result.updateAvailable;
+
+                    if (result.updateAvailable) {
+                        this.statusText = Component.literal("Update available: " + result.message);
+                        showToast("🔄 Update available: v" + result.version);
+                        dm.setIdle(); // Ready for download
+
+                        // Change button to "Download Update"
+                        int btnX = this.checkButton.getX();
+                        int btnY = this.checkButton.getY();
+                        int btnW = this.checkButton.getWidth();
+                        int btnH = this.checkButton.getHeight();
+                        this.removeWidget(checkButton);
+                        this.checkButton = this.addRenderableWidget(Button.builder(
+                                Component.literal("Download Update"),
+                                b -> handleDownloadUpdate(repo)
+                        ).bounds(btnX, btnY, btnW, btnH).build());
+                    } else {
+                        this.statusText = Component.literal("You're up to date! " + result.message);
+                        showToast("✅ You're up to date!");
+                        dm.setIdle();
+                    }
+                } else {
+                    this.statusText = Component.literal(result.message);
+                    showToast("❌ " + result.message);
+                    dm.setError(result.message);
+                }
+            });
+        }, "PackUpdater-Check");
+        checkThread.setDaemon(true);
+        checkThread.start();
+    }
+
+    /**
+     * Handles the "Download Update" button click — uses global DownloadManager.
+     */
+    private void handleDownloadUpdate(String repo) {
+        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
+
+        this.statusText = Component.literal("Downloading update...");
+        this.checkButton.active = false;
+        this.checkButton.setMessage(Component.literal("Downloading..."));
+
+        Thread downloadThread = new Thread(() -> {
+            boolean apePackDownloaded = PackUpdaterMod.downloadLatestApePack(repo);
+
+            Minecraft.getInstance().execute(() -> {
+                this.checkButton.active = true;
+                this.checkButton.setMessage(Component.literal("Check for Update"));
+
+                if (apePackDownloaded) {
+                    this.statusText = Component.literal("Update saved to apepacks/! Restart to install.");
+                    showToast("✅ Update downloaded! Restart to install.");
+                    dm.setDone();
+                } else {
+                    String errorMsg = dm.errorMessage != null ? dm.errorMessage : "Download failed";
+                    this.statusText = Component.literal("Download failed: " + errorMsg);
+                    showToast("❌ Download failed");
+                    dm.setError(errorMsg);
+                }
+            });
+        }, "PackUpdater-Download");
+        downloadThread.setDaemon(true);
+        downloadThread.start();
+    }
+
+    /**
+     * Handles the "Generate .apepack" button click.
+     */
+    private void handleGenerateApePack() {
+        String packName = this.packNameField.getValue().trim();
+        String packVersion = this.packVersionField.getValue().trim();
+
+        if (packName.isEmpty()) {
+            this.statusText = Component.literal("Please enter a pack name.");
+            return;
+        }
+        if (packVersion.isEmpty()) {
+            this.statusText = Component.literal("Please enter a pack version.");
+            return;
+        }
+
+        this.statusText = Component.literal("Generating .apepack file...");
+        this.generateButton.active = false;
+        this.generateButton.setMessage(Component.literal("Generating..."));
+
+        Thread genThread = new Thread(() -> {
+            try {
+                java.nio.file.Path instanceRoot = java.nio.file.Paths.get(".");
+                java.nio.file.Path outputFile = instanceRoot.resolve("generated_" + packName.replace(" ", "_") + "_" + packVersion + ".apepack");
+
+                String mcVersion = "26.1.2";
+
+                ApePackGenerator.GenerateResult result = ApePackGenerator.generate(
+                        instanceRoot, outputFile, packName, packVersion, mcVersion);
+
+                Minecraft.getInstance().execute(() -> {
+                    if (result.success) {
+                        this.statusText = Component.literal(
+                                ".apepack generated! " + result.modCount + " mods, " +
+                                result.configCount + " configs, " + result.scriptCount + " scripts.");
+                        showToast("✅ .apepack generated: " + outputFile.getFileName());
+
+                        // After generation, check for updates if repo is configured
+                        if (ConfigManager.repo != null && !ConfigManager.repo.isEmpty()) {
+                            Thread updateCheckThread = new Thread(() -> {
+                                UpdateCheckResult updateResult = checkForUpdates(ConfigManager.repo, ConfigManager.channel);
+                                Minecraft.getInstance().execute(() -> {
+                                    if (updateResult.success && updateResult.updateAvailable) {
+                                        showToast("🔄 Update available: v" + updateResult.version);
+                                    } else if (updateResult.success) {
+                                        showToast("✅ Pack up to date!");
+                                    }
+                                });
+                            }, "PackUpdater-PostGenCheck");
+                            updateCheckThread.setDaemon(true);
+                            updateCheckThread.start();
+                        }
+                    } else {
+                        this.statusText = Component.literal("Error: " + result.errorMessage);
+                        showToast("❌ Generation failed: " + result.errorMessage);
+                    }
+                    this.generateButton.active = true;
+                    this.generateButton.setMessage(Component.literal("Generate .apepack"));
+                });
+            } catch (Exception e) {
+                Minecraft.getInstance().execute(() -> {
+                    this.statusText = Component.literal("Error: " + e.getMessage());
+                    showToast("❌ Error: " + e.getMessage());
+                    this.generateButton.active = true;
+                    this.generateButton.setMessage(Component.literal("Generate .apepack"));
+                });
+            }
+        }, "PackUpdater-Generate");
+        genThread.setDaemon(true);
+        genThread.start();
+    }
 
     private void cycleChannel() {
-        // Cycle through available channels only, skipping missing tiers (no ghost buttons!)
         if (ConfigManager.channel.equals("stable")) {
             if (hasBeta) ConfigManager.channel = "beta";
             else if (hasNightly) ConfigManager.channel = "nightly";
@@ -577,78 +519,134 @@ public class PackUpdaterConfigScreen extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw a solid background instead of extractBackground() which triggers blur
-        // (Minecraft 26.1.2 only allows one blur per frame)
-        guiGraphics.fill(0, 0, this.width, this.height, 0xF0000000);
-        guiGraphics.centeredText(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+        // Dark semi-transparent background
+        guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
 
-        // Draw instructions above the URL field - use fixed startY
+        // Title
+        guiGraphics.centeredText(this.font, "⚙ Apeiron Pack Updater", this.width / 2, 18, 0x88CCFF);
+
+        int centerX = this.width / 2;
+        int panelWidth = 340;
+        int panelX = centerX - panelWidth / 2;
         int startY = 50;
-        guiGraphics.centeredText(this.font, "Enter a GitHub repo (user/repo) or full URL:", this.width / 2, startY - 15, 0xCCCCCC);
 
-        // Draw Generate .apepack section header
-        int genY = startY + 120;
-        guiGraphics.centeredText(this.font, "Generate .apepack Pack File", this.width / 2, genY - 20, 0xCCCCCC);
+        // ===================== UPDATE PANEL =====================
+        int updatePanelY = startY;
+        int updatePanelHeight = 130;
+        drawPanel(guiGraphics, panelX, updatePanelY, panelWidth, updatePanelHeight);
+        guiGraphics.centeredText(this.font, "🔄 Check for Updates", this.width / 2, updatePanelY + 12, 0x88CCFF);
 
-        // Draw Import .apepack section header
-        int importY = genY + 85;
-        guiGraphics.centeredText(this.font, "Import .apepack Pack File", this.width / 2, importY - 15, 0xCCCCCC);
+        // ===================== GENERATE PANEL =====================
+        int genPanelY = updatePanelY + updatePanelHeight + 10;
+        int genPanelHeight = 120;
+        drawPanel(guiGraphics, panelX, genPanelY, panelWidth, genPanelHeight);
+        guiGraphics.centeredText(this.font, "📦 Generate .apepack", this.width / 2, genPanelY + 12, 0x88CCFF);
 
+        // ===================== IMPORT PANEL =====================
+        int importPanelY = genPanelY + genPanelHeight + 10;
+        int importPanelHeight = 70;
+        drawPanel(guiGraphics, panelX, importPanelY, panelWidth, importPanelHeight);
+        guiGraphics.centeredText(this.font, "📥 Import .apepack", this.width / 2, importPanelY + 12, 0x88CCFF);
 
-        // Draw status message - position between check button and channel button
+        // ===================== DOWNLOAD PROGRESS =====================
+        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
+        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING || dm.status == PackUpdaterMod.DownloadStatus.CHECKING) {
+            int progressPanelY = importPanelY + importPanelHeight + 10;
+            int progressPanelHeight = 60;
+            drawPanel(guiGraphics, panelX, progressPanelY, panelWidth, progressPanelHeight);
+
+            String statusText = dm.status == PackUpdaterMod.DownloadStatus.CHECKING ? "Checking..." : "Downloading...";
+            guiGraphics.centeredText(this.font, "⬇ " + statusText, this.width / 2, progressPanelY + 12, 0x88CCFF);
+
+            // Progress bar background
+            int barX = panelX + 20;
+            int barY = progressPanelY + 28;
+            int barWidth = panelWidth - 40;
+            int barHeight = 14;
+            guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0x404040);
+
+            // Progress bar fill
+            int fillWidth = (int) (barWidth * dm.progress);
+            if (fillWidth > 0) {
+                guiGraphics.fill(barX, barY, barX + fillWidth, barY + barHeight, 0x33AA33);
+            }
+
+            // Progress percentage
+            int percent = (int) (dm.progress * 100);
+            String progressStr = percent + "%";
+            if (dm.totalBytes > 0) {
+                double downloadedMB = dm.downloadedBytes / (1024.0 * 1024.0);
+                double totalMB = dm.totalBytes / (1024.0 * 1024.0);
+                progressStr = String.format("%d%% (%.1f/%.1f MB)", percent, downloadedMB, totalMB);
+            }
+            guiGraphics.centeredText(this.font, progressStr, this.width / 2, barY + 1, 0xFFFFFF);
+        }
+
+        // ===================== STATUS MESSAGE =====================
         if (this.statusText.getString() != null && !this.statusText.getString().isEmpty()) {
             int color = 0xFFFF55;
             String msg = this.statusText.getString();
-            if (msg.contains("Update found") || msg.contains("prepared") || msg.contains("downloaded") || msg.contains("generated") || msg.contains("installed") || msg.contains("up to date")) color = 0x55FF55;
-            else if (msg.contains("Error") || msg.contains("Invalid") || msg.contains("No downloadable") || msg.contains("No update") || msg.contains("No release")) color = 0xFF5555;
-            guiGraphics.centeredText(this.font, msg, this.width / 2, startY + 90, color);
+            if (msg.contains("Update") || msg.contains("prepared") || msg.contains("downloaded") || msg.contains("generated") || msg.contains("installed") || msg.contains("up to date") || msg.contains("saved")) color = 0x55FF55;
+            else if (msg.contains("Error") || msg.contains("Invalid") || msg.contains("No downloadable") || msg.contains("No update") || msg.contains("No release") || msg.contains("failed")) color = 0xFF5555;
+            guiGraphics.centeredText(this.font, msg, this.width / 2, startY - 15, color);
         }
 
-        // Show status of detected channels
-        String availableInfo = String.format("Auto-update Tiers -> Stable: %s | Beta: %s | Nightly: %s",
+        // ===================== CHANNEL INFO =====================
+        String availableInfo = String.format("Tiers → Stable: %s | Beta: %s | Nightly: %s",
                 hasStable, hasBeta, hasNightly);
-        guiGraphics.centeredText(this.font, availableInfo, this.width / 2, startY + 110, 0xAAAAAA);
+        guiGraphics.centeredText(this.font, availableInfo, this.width / 2, this.height - 50, 0x666666);
 
-        // Draw toast notification
+        // ===================== TOAST NOTIFICATION =====================
         if (this.toastMessage != null && this.toastTimer > 0) {
             this.toastTimer--;
             if (this.toastTimer <= 0) {
                 this.toastMessage = null;
             } else {
-                // Calculate alpha based on timer (fade in/out)
                 int alpha;
                 if (this.toastTimer > TOAST_DURATION - 20) {
-                    // Fade in
                     alpha = (TOAST_DURATION - this.toastTimer) * 255 / 20;
                 } else if (this.toastTimer < 20) {
-                    // Fade out
                     alpha = this.toastTimer * 255 / 20;
                 } else {
                     alpha = 255;
                 }
                 alpha = Math.min(255, alpha);
-                
-                int toastWidth = this.font.width(this.toastMessage) + 20;
+
+                int toastWidth = this.font.width(this.toastMessage) + 24;
                 int toastX = (this.width - toastWidth) / 2;
                 int toastY = 35;
-                
-                // Background
-                guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY + 14, (alpha << 24) | 0x202020);
-                // Border
-                guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY - 1, (alpha << 24) | 0x404040);
-                guiGraphics.fill(toastX - 2, toastY + 13, toastX + toastWidth + 2, toastY + 14, (alpha << 24) | 0x404040);
-                guiGraphics.fill(toastX - 2, toastY - 1, toastX - 1, toastY + 13, (alpha << 24) | 0x404040);
-                guiGraphics.fill(toastX + toastWidth + 1, toastY - 1, toastX + toastWidth + 2, toastY + 13, (alpha << 24) | 0x404040);
-                
+
+                // Background with rounded corners effect
+                guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY + 16, (alpha << 24) | 0x1A1A2E);
+                // Top border highlight
+                guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY - 1, (alpha << 24) | 0x4466AA);
+                // Bottom border
+                guiGraphics.fill(toastX - 2, toastY + 15, toastX + toastWidth + 2, toastY + 16, (alpha << 24) | 0x333355);
+
                 // Text
-                guiGraphics.centeredText(this.font, this.toastMessage, this.width / 2, toastY, (alpha << 24) | 0xFFFFFF);
+                guiGraphics.centeredText(this.font, this.toastMessage, this.width / 2, toastY + 2, (alpha << 24) | 0xFFFFFF);
             }
         }
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
 
-    
+    /**
+     * Draws a styled panel with border and background.
+     */
+    private void drawPanel(GuiGraphicsExtractor guiGraphics, int x, int y, int width, int height) {
+        // Panel background
+        guiGraphics.fill(x, y, x + width, y + height, 0xAA1A1A2E);
+        // Top border (highlight)
+        guiGraphics.fill(x, y, x + width, y + 1, 0x4466AA);
+        // Left border
+        guiGraphics.fill(x, y, x + 1, y + height, 0x334488);
+        // Right border
+        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0x334488);
+        // Bottom border (shadow)
+        guiGraphics.fill(x, y + height - 1, x + width, y + height, 0x222244);
+    }
+
     @Override
     public void onClose() {
         ConfigManager.saveConfig();

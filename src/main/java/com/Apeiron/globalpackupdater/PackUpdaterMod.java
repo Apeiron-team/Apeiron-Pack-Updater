@@ -25,6 +25,61 @@ public class PackUpdaterMod {
     private static final Path INSTANCE_ROOT = Paths.get(".");
     private static PackUpdaterMod instance;
 
+    /**
+     * Global download state manager — survives config screen close/reopen.
+     */
+    public enum DownloadStatus {
+        IDLE, CHECKING, DOWNLOADING, DONE, ERROR
+    }
+
+    public static class DownloadManager {
+        public DownloadStatus status = DownloadStatus.IDLE;
+        public double progress = 0.0; // 0.0 to 1.0
+        public String currentRepo = null;
+        public String errorMessage = null;
+        public String latestVersion = null;
+        public boolean updateAvailable = false;
+        public long totalBytes = 0;
+        public long downloadedBytes = 0;
+
+        public synchronized void setIdle() {
+            this.status = DownloadStatus.IDLE;
+            this.progress = 0.0;
+            this.errorMessage = null;
+            this.latestVersion = null;
+            this.updateAvailable = false;
+            this.totalBytes = 0;
+            this.downloadedBytes = 0;
+        }
+
+        public synchronized void setChecking() {
+            this.status = DownloadStatus.CHECKING;
+            this.progress = 0.0;
+            this.errorMessage = null;
+        }
+
+        public synchronized void setDownloading() {
+            this.status = DownloadStatus.DOWNLOADING;
+            this.errorMessage = null;
+        }
+
+        public synchronized void setProgress(double p) {
+            this.progress = Math.max(0.0, Math.min(1.0, p));
+        }
+
+        public synchronized void setDone() {
+            this.status = DownloadStatus.DONE;
+            this.progress = 1.0;
+        }
+
+        public synchronized void setError(String msg) {
+            this.status = DownloadStatus.ERROR;
+            this.errorMessage = msg;
+        }
+    }
+
+    public static final DownloadManager downloadManager = new DownloadManager();
+
     public PackUpdaterMod(IEventBus modEventBus, ModContainer modContainer) {
         instance = this;
         modEventBus.addListener(this::onClientSetup);
@@ -281,20 +336,28 @@ public class PackUpdaterMod {
 
     /**
      * Downloads the latest .apepack file from a GitHub repo and places it in the apepacks folder.
+     * Reports progress via the global downloadManager.
      * Returns true if an .apepack was found and downloaded, false otherwise.
      */
     public static boolean downloadLatestApePack(String repo) {
+        DownloadManager dm = downloadManager;
+        dm.currentRepo = repo;
         try {
+            dm.setChecking();
             String apepackUrl = findApePackUrlStatic(repo);
             if (apepackUrl == null) {
+                dm.setError("No .apepack file found in latest release");
                 System.out.println("[PackUpdater] No .apepack file found in latest release");
                 return false;
             }
 
+            dm.setDownloading();
+            dm.setProgress(0.1);
+
             // Save to apepacks/ folder in the game directory
             Path apepacksDir = INSTANCE_ROOT.resolve("apepacks");
             Files.createDirectories(apepacksDir);
-            
+
             // Generate a unique filename with timestamp to avoid conflicts
             String timestamp = java.time.LocalDateTime.now().toString().replace(":", "-").replace(" ", "_");
             Path targetApePack = apepacksDir.resolve("update_" + timestamp + ".apepack");
@@ -306,16 +369,39 @@ public class PackUpdaterMod {
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(120000);
 
-            ReadableByteChannel channel = Channels.newChannel(conn.getInputStream());
-            try (FileOutputStream fos = new FileOutputStream(targetApePack.toFile())) {
-                fos.getChannel().transferFrom(channel, 0, Long.MAX_VALUE);
+            dm.setProgress(0.3);
+
+            // Get content length for progress tracking
+            int contentLength = conn.getContentLength();
+            if (contentLength > 0) {
+                dm.totalBytes = contentLength;
             }
 
+            try (InputStream inputStream = conn.getInputStream();
+                 FileOutputStream fos = new FileOutputStream(targetApePack.toFile())) {
+                byte[] buffer = new byte[8192];
+                long totalRead = 0;
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer, 0, buffer.length)) != -1) {
+                    fos.write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                    dm.downloadedBytes = totalRead;
+                    if (contentLength > 0) {
+                        double progress = 0.3 + (0.65 * ((double) totalRead / contentLength));
+                        dm.setProgress(progress);
+                    } else {
+                        dm.setProgress(0.3 + (0.65 * (totalRead % 1000000) / 1000000.0));
+                    }
+                }
+            }
+
+            dm.setDone();
             System.out.println("[PackUpdater] Downloaded .apepack update to " + targetApePack);
             System.out.println("[PackUpdater] The update will be installed on next game startup.");
             return true;
 
         } catch (Exception e) {
+            dm.setError(e.getMessage());
             System.err.println("[PackUpdater] Failed to download .apepack: " + e.getMessage());
             return false;
         }
