@@ -10,9 +10,12 @@ import java.nio.file.Paths;
 public class ConfigManager {
     private static final Path CONFIG_PATH = Paths.get("config", "globalpackupdater.json");
 
-    public static String repo = "SimonArminovski/YourModpackRepo";
+    public static String repo = "Apeiron-team/Apeiron-Pack-Updater";
     public static String channel = "stable"; // stable, beta, nightly
     public static String lastReleaseUrl = null;
+    
+    // Current mod version - synced from build.gradle
+    public static final String CURRENT_VERSION = "0.0.13";
 
     public static void loadConfig() {
         try {

@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 
 @Mod("packupdater")
 public class PackUpdaterMod {
-    private static final String CURRENT_VERSION = "1.0.0";
+    private static final String CURRENT_VERSION = ConfigManager.CURRENT_VERSION;
     private static final Path INSTANCE_ROOT = Paths.get(".");
     private static PackUpdaterMod instance;
 

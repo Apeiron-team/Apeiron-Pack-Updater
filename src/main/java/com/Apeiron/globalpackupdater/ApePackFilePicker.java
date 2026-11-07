@@ -30,6 +30,10 @@ public class ApePackFilePicker extends Screen {
     // Path input field for manual navigation
     private EditBox pathField;
 
+    // Search field for filtering files
+    private EditBox searchField;
+    private String searchQuery = "";
+
     // Selected file
     private File selectedFile = null;
 
@@ -67,9 +71,11 @@ public class ApePackFilePicker extends Screen {
 
         int centerX = this.width / 2;
         this.panelWidth = this.width - 40;
+        // Adjust panel height for the search field
+        this.panelTop = 98; // Moved down to accommodate search field
         this.panelHeight = this.height - this.panelTop - 100;
 
-        // Path input field at the top (moved up to y=28)
+        // Path input field at the top (y=28)
         this.pathField = new EditBox(this.font, centerX - 150, 28, 300, 20, Component.literal("Path"));
         this.pathField.setHint(Component.literal("Browse or type a folder path"));
         this.pathField.setValue(this.currentDir.getAbsolutePath());
@@ -91,8 +97,18 @@ public class ApePackFilePicker extends Screen {
                 }
         ).bounds(centerX + 155, 28, 40, 20).build());
 
-        // Navigation buttons row (y=52, below path field)
-        int navY = 52;
+        // Search field for filtering files (y=52, next to navigation buttons)
+        this.searchField = new EditBox(this.font, centerX - 100, 52, 200, 20, Component.literal("Search"));
+        this.searchField.setHint(Component.literal("Filter files by name..."));
+        this.searchField.setResponder(text -> {
+            this.searchQuery = text.toLowerCase();
+            this.scrollOffset = 0;
+            refreshFiles();
+        });
+        this.addRenderableWidget(this.searchField);
+
+        // Navigation buttons row (y=76, below search field)
+        int navY = 76;
 
         // Back button
         this.addRenderableWidget(Button.builder(
@@ -222,14 +238,23 @@ public class ApePackFilePicker extends Screen {
         Collections.sort(apepackFiles, (a, b) -> a.getName().toLowerCase().compareTo(b.getName().toLowerCase()));
         Collections.sort(otherFiles, (a, b) -> a.getName().toLowerCase().compareTo(b.getName().toLowerCase()));
 
+        // Apply search filter if query is not empty
+        String query = this.searchQuery;
+        
         for (File dir : directories) {
-            this.files.add(new FileInfo(dir, true));
+            if (query.isEmpty() || dir.getName().toLowerCase().contains(query)) {
+                this.files.add(new FileInfo(dir, true));
+            }
         }
         for (File file : apepackFiles) {
-            this.files.add(new FileInfo(file, false));
+            if (query.isEmpty() || file.getName().toLowerCase().contains(query)) {
+                this.files.add(new FileInfo(file, false));
+            }
         }
         for (File file : otherFiles) {
-            this.files.add(new FileInfo(file, false));
+            if (query.isEmpty() || file.getName().toLowerCase().contains(query)) {
+                this.files.add(new FileInfo(file, false));
+            }
         }
 
         this.pathField.setValue(this.currentDir.getAbsolutePath());
@@ -363,6 +388,11 @@ public class ApePackFilePicker extends Screen {
 
         // Current directory label
         guiGraphics.centeredText(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
+        
+        // Search filter indicator
+        if (!this.searchQuery.isEmpty()) {
+            guiGraphics.centeredText(this.font, "Filtering: " + this.searchQuery + " (" + this.files.size() + " results)", this.width / 2, this.panelTop - 20, 0x55FF55);
+        }
 
         // Draw panel background
         guiGraphics.fill(this.panelLeft, this.panelTop, this.panelLeft + this.panelWidth, this.panelTop + this.panelHeight, 0x80000000);
@@ -439,7 +469,7 @@ public class ApePackFilePicker extends Screen {
         }
 
         // Instructions
-        guiGraphics.centeredText(this.font, "Click a folder to open, click a .apepack to select, scroll to browse", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
+        guiGraphics.centeredText(this.font, "Click folder to open, click .apepack to select, use search to filter", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }

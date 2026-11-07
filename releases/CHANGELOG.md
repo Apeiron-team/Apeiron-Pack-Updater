@@ -2,6 +2,35 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.13] - 2026-11-07
+
+### Fixed
+- URL text box now accepts short GitHub repo names (e.g., "user/repo") in addition to full URLs — previously only full GitHub URLs were accepted, making it impossible to enter short repo identifiers
+- Default repo changed from placeholder to "Apeiron-team/Apeiron-Pack-Updater" for proper update checking
+
+### Added
+- Toast notification system — visual notifications appear at the top of the config screen for update check results, .apepack generation status, and errors
+- Toast notifications fade in and out smoothly over 2 seconds
+- Update check toast notifications trigger on both manual "Check for Update" button press and automatically after .apepack generation completes
+- Better update channel checker with semantic version comparison — compares version numbers segment by segment (numeric and alphanumeric) to accurately detect newer versions
+- "Download Update" button appears when an update is available, allowing one-click download of the latest .apepack
+- Search field in the file picker — filter files and folders by name in real time, with result count display
+- File picker now shows a filter indicator when searching is active
+
+### Changed
+- Config screen URL field hint updated to "user/repo or https://github.com/user/repo" for clarity
+- Config screen instructions updated to reflect short repo name support
+- Update check flow now shows a two-step process: check → download, with clear status messages at each step
+- After .apepack generation, the mod automatically checks for updates if a repo is configured
+- File picker layout adjusted to accommodate the search field
+- Current version is now centralized in ConfigManager and synced with build.gradle
+
+### Details
+- Toast notifications use emoji icons: ✅ for success, 🔄 for updates available, ⚠️ for warnings, ❌ for errors
+- Version comparison splits by `.`, `+`, `-`, `_` delimiters and compares each segment numerically when possible
+- The search field filters all file types (directories, .apepack files, other files) by name
+- The update channel system supports stable, beta, and nightly channels with proper prerelease detection
+
 ## [0.0.12] - 2026-11-07
 
 ### Fixed
