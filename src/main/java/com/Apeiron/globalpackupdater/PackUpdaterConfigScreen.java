@@ -314,6 +314,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // URL input field - accepts full URLs or short repo names (user/repo)
         this.urlField = new EditBox(this.font, centerX - 100, startY, 200, 20, Component.literal("GitHub Repo"));
+        this.urlField.setMaxLength(Integer.MAX_VALUE); // Allow very long GitHub usernames and URLs
         this.urlField.setResponder(text -> {
             // Update repo config when URL changes
             String repo = extractRepoFromUrl(text);

@@ -2,6 +2,11 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.14] - 2026-11-07
+
+### Fixed
+- GitHub repo text box character limit increased to essentially unlimited (Integer.MAX_VALUE) — previously the default EditBox limit truncated long GitHub usernames and URLs, making it impossible to enter repos with very long owner names
+
 ## [0.0.13] - 2026-11-07
 
 ### Fixed
