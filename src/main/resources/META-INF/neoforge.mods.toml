@@ -1,0 +1,19 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "All Rights Reserved"
+issueTrackerURL = "https://github.com/SimonArminovski/YourModpackRepo/issues"
+
+[[mods]]
+modId = "packupdater"
+version = "${projectVersion}"
+displayName = "Apeiron Pack Updater"
+displayURL = "https://github.com/SimonArminovski/YourModpackRepo"
+description = "A custom pack updater made by apeiron team for their modpacks to have a self updater from github cause they thought updating from curseforge sucks ass"
+authors = "Apeiron Team"
+
+[[dependencies.packupdater]]
+    modId = "neoforge"
+    type = "required"
+    versionRange = "[26.1.2,)"
+    ordering = "NONE"
+    side = "BOTH"

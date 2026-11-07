@@ -1,9 +1,0 @@
-modLoader = "javafml"
-loaderVersion = "[1,)"
-license = "All Rights Reserved"
-
-[[mods]]
-modId = "packupdater"
-version = "0.1.0"
-displayName = "Apeiron pack updater "
-description = "A custom pack updater made by apeiron team for their modpacks to have a self updater from github cause they thought updating from curseforge sucks ass"

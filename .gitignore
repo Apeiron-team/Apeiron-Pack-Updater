@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+gradle/
+!gradle/wrapper/
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Runtime
+run/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

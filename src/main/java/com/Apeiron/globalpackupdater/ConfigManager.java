@@ -12,6 +12,7 @@ public class ConfigManager {
 
     public static String repo = "SimonArminovski/YourModpackRepo";
     public static String channel = "stable"; // stable, beta, nightly
+    public static String lastReleaseUrl = null;
 
     public static void loadConfig() {
         try {
@@ -20,6 +21,7 @@ public class ConfigManager {
                 JsonObject json = JsonParser.parseString(content).getAsJsonObject();
                 if (json.has("repo")) repo = json.get("repo").getAsString();
                 if (json.has("channel")) channel = json.get("channel").getAsString();
+                if (json.has("lastReleaseUrl")) lastReleaseUrl = json.get("lastReleaseUrl").getAsString();
             } else {
                 saveConfig();
             }
@@ -34,6 +36,9 @@ public class ConfigManager {
             JsonObject json = new JsonObject();
             json.addProperty("repo", repo);
             json.addProperty("channel", channel);
+            if (lastReleaseUrl != null) {
+                json.addProperty("lastReleaseUrl", lastReleaseUrl);
+            }
             Files.writeString(CONFIG_PATH, json.toString());
         } catch (Exception e) {
             System.err.println("[PackUpdater] Failed to save config.");
