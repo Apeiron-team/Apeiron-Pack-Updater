@@ -4,8 +4,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * Loading screen shown during .apepack import.
@@ -208,23 +212,28 @@ public class ApePackImportScreen extends Screen {
         }
 
         if (!importComplete) {
-            // Progress bar using blitSprite with Minecraft widget sprites
+            // Progress bar
             int barX = centerX - 100;
             int barY = startY + 50;
             int barWidth = 200;
-            int barHeight = 12;
+            int barHeight = 10;
 
-            // Draw background (empty progress bar track)
-            Identifier progressBg = Identifier.parse("minecraft:widget/progress");
-            guiGraphics.blitSprite(null, progressBg, barX, barY, barWidth, barHeight);
+            // Draw background (dark gray track)
+            guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF333333);
+            
+            // Draw border
+            guiGraphics.fill(barX, barY, barX + barWidth, barY, 0xFF666666);
+            guiGraphics.fill(barX, barY + barHeight - 1, barX + barWidth, barY + barHeight, 0xFF666666);
+            guiGraphics.fill(barX, barY, barX, barY + barHeight, 0xFF666666);
+            guiGraphics.fill(barX + barWidth - 1, barY, barX + barWidth, barY + barHeight, 0xFF666666);
 
-            // Draw progress fill (scaled by progress 0.0 to 1.0)
+            // Draw progress fill (blue bar, scaled by progress 0.0 to 1.0)
             if (totalFiles > 0) {
                 double progress = (double) filesProcessed / totalFiles;
                 int filledWidth = (int) (barWidth * progress);
                 if (filledWidth > 0) {
-                    Identifier progressFill = Identifier.parse("minecraft:widget/progress");
-                    guiGraphics.blitSprite(null, progressFill, barX, barY, filledWidth, barHeight);
+                    // Fill with blue color, leaving 1px border
+                    guiGraphics.fill(barX + 1, barY + 1, barX + filledWidth, barY + barHeight - 1, 0xFF3399FF);
                 }
             }
 
@@ -295,6 +304,56 @@ public class ApePackImportScreen extends Screen {
 
     @Override
     public void onClose() {
+        // Block closing during import
+        if (!importComplete) {
+            return;
+        }
         Minecraft.getInstance().setScreen(this.parent);
+    }
+
+    // Block all mouse input during import
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (!importComplete) {
+            return false;
+        }
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (!importComplete) {
+            return false;
+        }
+        return super.mouseReleased(event);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        if (!importComplete) {
+            return false;
+        }
+        return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
+    }
+
+    // Block all keyboard input during import
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        if (!importComplete) {
+            return false;
+        }
+        return super.charTyped(event);
+    }
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        // Block ESC during import
+        if (!importComplete && event.key() == GLFW.GLFW_KEY_ESCAPE) {
+            return true;
+        }
+        if (!importComplete) {
+            return false;
+        }
+        return super.keyPressed(event);
     }
 }

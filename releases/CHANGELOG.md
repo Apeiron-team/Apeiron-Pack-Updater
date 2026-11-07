@@ -2,6 +2,17 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.18] - 2026-11-07
+
+### Fixed
+- **Progress bar not rendering** — Replaced broken `blitSprite` calls with proper `fill()` based progress bar that draws a dark gray track with a blue fill bar and visible border. The previous `blitSprite` approach used the same sprite texture for both background and fill without proper UV coordinates, resulting in nothing being drawn
+- **All button presses blocked during import** — Added input blocking during .apepack extraction: mouse clicks, mouse scroll, keyboard input, and ESC key are all ignored while the import is running. The screen cannot be closed during import either
+
+### Changed
+- Progress bar now uses a simple but reliable `fill()` approach: dark gray background (0x333333), light gray border (0x666666), and blue fill (0x3399FF) that scales with the import progress
+- Import screen overrides `mouseClicked`, `mouseReleased`, `mouseScrolled`, `charTyped`, `keyPressed`, and `onClose` to block all input until `importComplete` is true
+- ESC key is explicitly blocked during import to prevent accidentally closing the screen
+
 ## [0.0.17] - 2026-11-07
 
 ### Fixed

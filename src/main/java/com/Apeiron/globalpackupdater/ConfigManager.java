@@ -16,7 +16,7 @@ public class ConfigManager {
     public static String modpackVersion = "v0.0"; // Default modpack version
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "0.0.17";
+    public static final String CURRENT_VERSION = "0.0.18";
 
     public static void loadConfig() {
         try {
