@@ -202,17 +202,19 @@ public class PackUpdaterConfigScreen extends Screen {
     protected void init() {
         super.init();
 
-        // Check available channels on a background thread
-        Thread channelThread = new Thread(() -> {
-            checkAvailableChannels();
-            Minecraft.getInstance().execute(() -> {
-                if (this.channelButton != null) {
-                    this.channelButton.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
-                }
-            });
-        }, "PackUpdater-Channels");
-        channelThread.setDaemon(true);
-        channelThread.start();
+        // Check available channels on a background thread (only on first init)
+        if (this.channelButton == null) {
+            Thread channelThread = new Thread(() -> {
+                checkAvailableChannels();
+                Minecraft.getInstance().execute(() -> {
+                    if (this.channelButton != null) {
+                        this.channelButton.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
+                    }
+                });
+            }, "PackUpdater-Channels");
+            channelThread.setDaemon(true);
+            channelThread.start();
+        }
 
         // Reset download manager if it was in a transient state from a previous session
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
@@ -220,6 +222,33 @@ public class PackUpdaterConfigScreen extends Screen {
             dm.setIdle();
         }
 
+        buildWidgets();
+    }
+
+    /**
+     * Called when the screen is first created or when the window resolution changes.
+     * Rebuilds all widgets at the correct positions for the current resolution.
+     */
+    @Override
+    public void resize(int width, int height) {
+        super.resize(width, height);
+        // Preserve user input before rebuilding widgets
+        String urlValue = this.urlField != null ? this.urlField.getValue() : "";
+        String packNameValue = this.packNameField != null ? this.packNameField.getValue() : "";
+        String packVersionValue = this.packVersionField != null ? this.packVersionField.getValue() : "";
+
+        buildWidgets();
+
+        // Restore user input after rebuilding
+        if (this.urlField != null) this.urlField.setValue(urlValue);
+        if (this.packNameField != null) this.packNameField.setValue(packNameValue);
+        if (this.packVersionField != null) this.packVersionField.setValue(packVersionValue);
+    }
+
+    /**
+     * Builds all widgets for the config screen at the current resolution.
+     */
+    private void buildWidgets() {
         int centerX = this.width / 2;
         int panelWidth = 340;
         int panelX = centerX - panelWidth / 2;
@@ -271,13 +300,11 @@ public class PackUpdaterConfigScreen extends Screen {
         // Pack name field
         this.packNameField = new EditBox(this.font, panelX + 20, genPanelY + 30, panelWidth - 40, 20, Component.literal("Pack Name"));
         this.packNameField.setHint(Component.literal("My Modpack"));
-        this.packNameField.setValue("V++ (high Q)");
         this.addRenderableWidget(this.packNameField);
 
         // Pack version field
         this.packVersionField = new EditBox(this.font, panelX + 20, genPanelY + 55, panelWidth - 40, 20, Component.literal("Pack Version"));
         this.packVersionField.setHint(Component.literal("1.0.0"));
-        this.packVersionField.setValue("1.0.0");
         this.addRenderableWidget(this.packVersionField);
 
         // Generate button
@@ -305,10 +332,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // ===================== DOWNLOAD PROGRESS SECTION =====================
         // Only shown when a download is in progress
-        int progressPanelY = importPanelY + 60;
-        if (dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING) {
-            // Progress will be drawn in extractRenderState
-        }
+        // (Progress is drawn in extractRenderState, no widgets needed here)
 
         // ===================== DONE BUTTON =====================
         this.addRenderableWidget(Button.builder(

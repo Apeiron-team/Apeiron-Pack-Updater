@@ -2,6 +2,16 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.19] - 2026-11-07
+
+### Fixed
+- **Config screen resets on resolution change** — Added `resize()` override that rebuilds all widgets (buttons, text fields) whenever the Minecraft window resolution changes. This fixes the bug where toggling between windowed and fullscreen, or resizing the window, would leave buttons and text fields at their old positions while the rendered panels moved to the correct position
+
+### Changed
+- Extracted widget creation from `init()` into a reusable `buildWidgets()` method so both initial creation and resize use the same layout logic
+- The `resize()` method preserves user input in all text fields (GitHub repo URL, pack name, pack version) so typed text is not lost when the window is resized
+- Channel check thread now only starts once on the first `init()` call, preventing duplicate threads on resize
+
 ## [0.0.18] - 2026-11-07
 
 ### Fixed
