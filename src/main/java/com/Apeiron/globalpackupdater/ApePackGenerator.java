@@ -244,7 +244,8 @@ public class ApePackGenerator {
                 try (Stream<Path> paths = Files.list(modsDir)) {
                     List<Path> modFiles = paths
                             .filter(p -> p.toString().toLowerCase().endsWith(".jar")
-                                    && !p.toString().toLowerCase().endsWith(".apepack"))
+                                    && !p.toString().toLowerCase().endsWith(".apepack")
+                                    && !p.getFileName().toString().toLowerCase().startsWith("packupdater"))
                             .collect(Collectors.toList());
 
                     for (Path modFile : modFiles) {

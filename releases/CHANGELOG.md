@@ -2,6 +2,19 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.12] - 2026-11-07
+
+### Fixed
+- Generating .apepack files included the PackUpdater mod itself, causing imported packs to overwrite the user's current PackUpdater version — PackUpdater is now excluded from generated .apepack files
+
+### Changed
+- When scanning the mods/ directory during .apepack generation, any JAR file starting with "packupdater" is skipped
+- The mod count in generated .apepack metadata no longer includes PackUpdater
+
+### Details
+- This ensures that importing an .apepack only updates the pack's mods, configs, and scripts without affecting the PackUpdater mod version
+- Users can keep the latest PackUpdater version independent of the modpack version they're importing
+
 ## [0.0.11] - 2026-11-07
 
 ### Fixed
