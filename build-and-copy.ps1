@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $ScriptDir = $PSScriptRoot
 $ProjectRoot = Split-Path $ScriptDir -Parent
-$ReleasesDir = Join-Path $ProjectRoot "releases"
+$ReleasesDir = Join-Path $ScriptDir "releases"
 
 # Read version from build.gradle
 $BuildGradle = Get-Content (Join-Path $ScriptDir "build.gradle") -Raw
