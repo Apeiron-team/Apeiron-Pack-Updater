@@ -24,7 +24,7 @@ A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management
 
 ## Installation
 
-1. Download `packupdater-0.0.12.jar` from the [Releases](https://github.com/YOUR_USERNAME/Apeiron-Pack-Updater/releases) page
+1. Download `packupdater.jar` from the [Releases](https://github.com/YOUR_USERNAME/Apeiron-Pack-Updater/releases) page
 2. Place the JAR in your Minecraft `mods/` folder
 3. Launch Minecraft with NeoForge 26.1.2
 
