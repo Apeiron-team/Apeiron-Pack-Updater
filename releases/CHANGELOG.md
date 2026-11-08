@@ -4,6 +4,24 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.1.9] - ApePack v2 File Extension Change - 2026-11-08
+
+### Changed
+- **v2 file extension** — ApePack v2 files now use the `.apepack2` extension instead of `.apepack`. This clearly distinguishes v2 files (XZ/LZMA2 compression, chunk-based storage) from v1 files (standard ZIP).
+- **Config screen** — Generate button now creates `.apepack2` files with updated UI text.
+- **File picker** — Accepts both `.apepack` (v1) and `.apepack2` (v2) files for full backward compatibility.
+- **Startup scanner** — Scans for both `.apepack` and `.apepack2` files in `mods/` and `apepacks/` directories.
+- **README** — Updated all documentation to reflect `.apepack2` extension for v2 format.
+
+### Fixed
+- **File format confusion** — v1 and v2 files now have distinct extensions, making it clear which format is which.
+
+### Notes
+- Full backward compatibility: the mod still reads and installs `.apepack` (v1) files.
+- This is a testing release — not published to GitHub yet.
+
+---
+
 ## [1.1.8] - ApePack v2 Auto-Restart Fix - 2026-11-08
 
 ### Fixed

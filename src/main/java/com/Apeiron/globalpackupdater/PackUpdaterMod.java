@@ -78,7 +78,7 @@ public class PackUpdaterMod {
                 if (Files.exists(modsDir)) {
                     try (Stream<Path> paths = Files.list(modsDir)) {
                         apepackFile = paths
-                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
                                 .filter(p -> !ApePackLoaderV2.isApePackAlreadyProcessed(p))
                                 .findFirst()
                                 .orElse(null);
@@ -87,7 +87,7 @@ public class PackUpdaterMod {
                 if (apepackFile == null && Files.exists(apepacksDir)) {
                     try (Stream<Path> paths = Files.list(apepacksDir)) {
                         List<Path> apepacks = paths
-                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
                                 .filter(p -> !ApePackLoaderV2.isApePackAlreadyProcessed(p))
                                 .sorted(Comparator.comparingLong(p -> {
                                     try { return Files.getLastModifiedTime(p).toMillis(); }

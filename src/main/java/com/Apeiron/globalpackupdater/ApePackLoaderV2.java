@@ -238,7 +238,7 @@ public class ApePackLoaderV2 {
         // Scan mods/ directory
         try (Stream<Path> paths = Files.list(modsDir)) {
             apepackFiles.addAll(paths
-                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
                     .collect(Collectors.toList()));
         } catch (IOException e) {
             System.err.println("[PackUpdater] Error scanning mods directory: " + e.getMessage());
@@ -249,7 +249,7 @@ public class ApePackLoaderV2 {
         if (Files.exists(apepacksDir)) {
             try (Stream<Path> paths = Files.list(apepacksDir)) {
                 List<Path> apepacksFiles = paths
-                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
                         .sorted(Comparator.comparingLong(p -> {
                             try { return Files.getLastModifiedTime(p).toMillis(); }
                             catch (IOException e) { return 0; }

@@ -2,28 +2,28 @@
 
 > **🎉 ApePack v2 is now live!** Version 1.1.0+ includes XZ/LZMA2 extreme compression (up to 87% smaller files), parallel extraction, archive integrity verification, dependency detection, config conflict resolution, and resource/data pack support. The v1 format remains fully supported for backward compatibility.
 
-A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management with a custom `.apepack` file format for seamless pack updates. Download, verify, and install modpack updates directly from GitHub releases — no launcher required.
+A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management with a custom `.apepack2` file format for seamless pack updates. Download, verify, and install modpack updates directly from GitHub releases — no launcher required.
 
 ## Features
 
-- **`.apepack` File Format (v2)** — Custom archive with XZ/LZMA2 extreme compression (up to 87% smaller), chunk-based storage, parallel extraction, and SHA-256 integrity verification
-- **`.apepack` v1 Support** — Full backward compatibility with v1 .apepack files
-- **Auto-Extract on Startup** — On game launch, the mod checks for new `.apepack` files in the `apepacks/` folder, extracts them automatically, and restarts the game — no player input required
+- **`.apepack2` File Format (v2)** — Custom archive with XZ/LZMA2 extreme compression (up to 87% smaller), chunk-based storage, parallel extraction, and SHA-256 integrity verification
+- **`.apepack` v1 Support** — Full backward compatibility with legacy v1 .apepack files
+- **Auto-Extract on Startup** — On game launch, the mod checks for new `.apepack2` or `.apepack` files in the `apepacks/` folder, extracts them automatically, and restarts the game — no player input required
 - **Smart Mod Updates** — Compares mod versions before installing; only replaces older versions and removes the old JAR files
 - **Config Preservation** — Packs and installs `.toml`, `.json`, `.cfg`, and `.properties` config files while protecting user settings
 - **User Settings Protection** — Never overwrites `options.txt`, keybinds, video settings, server lists, or Realms data
 - **KubeJS/KubeGroovy Support** — Automatically detects and packs server scripts, client scripts, Groovy scripts, assets, and data packs
 - **Tabbed Config Screen** — Clean, organized config UI with tabs for Apepacks, Generate, and Settings
-- **In-Game File Picker** — Native Minecraft file browser for selecting `.apepack` files with search, navigation, and scrollbar
+- **In-Game File Picker** — Native Minecraft file browser for selecting `.apepack2` or `.apepack` files with search, navigation, and scrollbar
 - **Import Progress Screen** — Real-time progress bar showing each file being imported with live counts
-- **Real-Time Generation Progress** — Live status updates during .apepack generation (scanning, hashing, compressing)
-- **GitHub Release Integration** — Check for `.apepack` updates from GitHub releases with manual download and progress tracking
-- **In-Game Pack Generation** — Generate `.apepackv2` files from your current instance with extreme compression
+- **Real-Time Generation Progress** — Live status updates during .apepack2 generation (scanning, hashing, compressing)
+- **GitHub Release Integration** — Check for `.apepack2` updates from GitHub releases with manual download and progress tracking
+- **In-Game Pack Generation** — Generate `.apepack2` files from your current instance with extreme compression
 - **Auto-Restart** — After installing an update, the game automatically restarts with the new mods loaded
 - **Options Menu Button** — Quick access to PackUpdater config from Minecraft's Options menu (Esc → Options)
 - **Config Conflict Resolution** — Choose overwrite, merge, skip, or backup strategies for config files
-- **Resource Pack Support** — Include resource packs in .apepack files
-- **Data Pack Support** — Include data packs in .apepack files
+- **Resource Pack Support** — Include resource packs in .apepack2 files
+- **Data Pack Support** — Include data packs in .apepack2 files
 - **Dependency Detection** — Automatic detection of mod dependencies from metadata
 
 ## Compatibility
@@ -47,13 +47,13 @@ A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management
 - **Mods Menu**: Press **Esc** → **Mods** → Find **PackUpdater** → Click the **Wrench icon** (Config)
 - **Options Menu**: Press **Esc** → **Options** → Click **"PackUpdater"** button
 
-### Generating an `.apepack` File
+### Generating an `.apepack2` File
 
 1. Open the PackUpdater config screen
 2. Enter a **Pack Name** (e.g., "MyModpack")
 3. Enter a **Version** (e.g., "1.0.0")
-4. Click **"Generate .apepack"**
-5. The file saves to your instance folder as `generated_<name>_<version>.apepack`
+4. Click **"Generate .apepack2"**
+5. The file saves to your instance folder as `generated_<name>_<version>.apepack2`
 
 The generated file includes:
 - All mods (excluding PackUpdater itself)
@@ -64,28 +64,28 @@ The generated file includes:
 
 The file uses **ApePack v2** format with XZ/LZMA2 compression, making it up to 87% smaller than v1 files.
 
-### Installing an `.apepack` File
+### Installing an `.apepack2` File
 
-**Automatic (Recommended)** — Place the `.apepack` file in the `apepacks/` folder of your instance. On game startup, the mod will automatically extract and install the update, then restart the game.
+**Automatic (Recommended)** — Place the `.apepack2` file in the `apepacks/` folder of your instance. On game startup, the mod will automatically extract and install the update, then restart the game.
 
-**Manual** — Open the PackUpdater config screen → Click **"Browse .apepack"** → Navigate to and select the `.apepack` file → The import progress screen shows each file being processed → The game restarts automatically when complete.
+**Manual** — Open the PackUpdater config screen → Click **"Browse .apepack"** → Navigate to and select the `.apepack2` or `.apepack` file → The import progress screen shows each file being processed → The game restarts automatically when complete.
 
 ### Checking for Updates
 
 1. Open the PackUpdater config screen (Apepacks tab)
-2. Click **"Check for Update"** to scan GitHub for newer `.apepack` releases
+2. Click **"Check for Update"** to scan GitHub for newer `.apepack2` releases
 3. If a newer version is available, click **"Download Update"**
-4. The downloaded `.apepack` saves to the `apepacks/` folder
+4. The downloaded `.apepack2` saves to the `apepacks/` folder
 5. On game restart, the update is automatically extracted and installed
 
-## `.apepack` File Format
+## `.apepack2` File Format
 
-### ApePack v2 (Current)
+### ApePack v2 (Current) — `.apepack2` extension
 
-An `.apepack` v2 file uses chunk-based storage with XZ/LZMA2 compression:
+An `.apepack2` file uses chunk-based storage with XZ/LZMA2 compression:
 
 ```
-my-pack.apepack
+my-pack.apepack2
 ├── apepack.json        # Pack metadata (name, version, MC version, formatLabel: "apepackv2")
 ├── manifest.json       # File list with SHA-256 hashes, versions, types, and install paths
 ├── chunk_001.xz        # XZ-compressed chunk of files
@@ -101,7 +101,7 @@ my-pack.apepack
 - Config conflict resolution strategies
 - Resource and data pack support
 
-### ApePack v1 (Legacy)
+### ApePack v1 (Legacy) — `.apepack` extension
 
 An `.apepack` v1 file is a ZIP archive with the following structure:
 

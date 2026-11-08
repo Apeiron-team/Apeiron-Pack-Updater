@@ -917,8 +917,8 @@ public class PackUpdaterConfigScreen extends Screen {
         packNameField.active = false;
         packVersionField.active = false;
 
-        statusText = Component.literal("Starting .apepackv2 generation...");
-        showToast("Generating .apepackv2...");
+        statusText = Component.literal("Starting .apepack2 generation...");
+        showToast("Generating .apepack2...");
 
         Thread genThread = new Thread(() -> {
             try {
@@ -937,7 +937,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     } catch (IOException ignored) {}
                 }
 
-                Path outputFile = instanceRoot.resolve("generated_" + packName.replace(" ", "_") + "_" + packVersion + ".apepack");
+                Path outputFile = instanceRoot.resolve("generated_" + packName.replace(" ", "_") + "_" + packVersion + ".apepack2");
                 String mcVersion = "26.1.2";
                 String modLoader = "neoforge-26.1.2.122";
 
@@ -953,14 +953,14 @@ public class PackUpdaterConfigScreen extends Screen {
                     generating = false;
                     if (generateButton != null) {
                         generateButton.active = true;
-                        generateButton.setMessage(Component.literal("Generate .apepack"));
+                        generateButton.setMessage(Component.literal("Generate .apepack2"));
                     }
                     if (packNameField != null) packNameField.active = true;
                     if (packVersionField != null) packVersionField.active = true;
 
                     if (result.success) {
                         statusText = Component.literal(
-                                ".apepackv2 generated! " + result.modCount + " mods, " +
+                                ".apepack2 generated! " + result.modCount + " mods, " +
                                 result.configCount + " configs, " + result.scriptCount + " scripts. " +
                                 String.format("(%.1f%% compressed)", result.compressionRatio));
                         showToast("Generated: " + outputFile.getFileName());
@@ -974,7 +974,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     generating = false;
                     if (generateButton != null) {
                         generateButton.active = true;
-                        generateButton.setMessage(Component.literal("Generate .apepack"));
+                        generateButton.setMessage(Component.literal("Generate .apepack2"));
                     }
                     if (packNameField != null) packNameField.active = true;
                     if (packVersionField != null) packVersionField.active = true;
@@ -998,7 +998,7 @@ public class PackUpdaterConfigScreen extends Screen {
         int centerX = this.width / 2;
         
         // Info text
-        guiGraphics.centeredText(font, "Create an .apepack from your current instance", centerX, 50, 0x88CCFF);
+        guiGraphics.centeredText(font, "Create an .apepack2 from your current instance", centerX, 50, 0x88CCFF);
         guiGraphics.centeredText(font, "Includes mods, configs, and KubeJS scripts", centerX, 67, 0x666666);
 
         // Status

@@ -60,7 +60,7 @@ public class ApePackFilePicker extends Screen {
     }
 
     public ApePackFilePicker(Screen parent, FileSelectedCallback callback) {
-        super(Component.literal("Select .apepack File"));
+        super(Component.literal("Select .apepack or .apepack2 File"));
         this.parent = parent;
         this.callback = callback;
         // Bug 4: Default to the modpack's apepacks directory
@@ -257,7 +257,7 @@ public class ApePackFilePicker extends Screen {
         for (File file : allFiles) {
             if (file.isDirectory()) {
                 directories.add(file);
-            } else if (file.getName().toLowerCase().endsWith(".apepack")) {
+            } else if (file.getName().toLowerCase().endsWith(".apepack") || file.getName().toLowerCase().endsWith(".apepack2")) {
                 apepackFiles.add(file);
             } else {
                 otherFiles.add(file);
@@ -335,7 +335,7 @@ public class ApePackFilePicker extends Screen {
                             this.currentDir = finalInfo.file;
                             this.scrollOffset = 0;
                             refreshFiles();
-                        } else if (finalInfo.file.getName().toLowerCase().endsWith(".apepack")) {
+                        } else if (finalInfo.file.getName().toLowerCase().endsWith(".apepack") || finalInfo.file.getName().toLowerCase().endsWith(".apepack2")) {
                             this.selectedFile = finalInfo.file;
                         }
                     }
@@ -416,7 +416,7 @@ public class ApePackFilePicker extends Screen {
         guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
 
         // Title
-        guiGraphics.centeredText(this.font, "Select .apepack File", this.width / 2, 8, 0x88CCFF);
+        guiGraphics.centeredText(this.font, "Select .apepack or .apepack2 File", this.width / 2, 8, 0x88CCFF);
 
         // Current directory label
         guiGraphics.centeredText(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
@@ -446,7 +446,7 @@ public class ApePackFilePicker extends Screen {
 
             if (y < this.panelTop || y + ROW_HEIGHT > this.panelTop + this.panelHeight) continue;
 
-            boolean isApepack = !info.isDirectory && info.file.getName().toLowerCase().endsWith(".apepack");
+            boolean isApepack = !info.isDirectory && (info.file.getName().toLowerCase().endsWith(".apepack") || info.file.getName().toLowerCase().endsWith(".apepack2"));
 
             // Highlight selected file
             boolean isSelected = this.selectedFile != null && this.selectedFile.equals(info.file);
@@ -501,7 +501,7 @@ public class ApePackFilePicker extends Screen {
         }
 
         // Instructions
-        guiGraphics.centeredText(this.font, "Click folder to open, click .apepack to select, use search to filter", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
+        guiGraphics.centeredText(this.font, "Click folder to open, click .apepack/.apepack2 to select, use search to filter", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
