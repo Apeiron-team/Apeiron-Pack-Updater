@@ -438,7 +438,7 @@ public class PackUpdaterConfigScreen extends Screen {
     /**
      * Downloads the latest .apepack from GitHub releases.
      */
-    private boolean downloadLatestApePack(String repo) {
+    private Path downloadLatestApePack(String repo) {
         try {
             String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
             URL url = URI.create(apiUrl).toURL();
@@ -447,7 +447,7 @@ public class PackUpdaterConfigScreen extends Screen {
             ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(30000);
-            if (conn.getResponseCode() != 200) return false;
+            if (conn.getResponseCode() != 200) return null;
 
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
             JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
@@ -472,7 +472,7 @@ public class PackUpdaterConfigScreen extends Screen {
                             dlConn.setConnectTimeout(5000);
                             dlConn.setReadTimeout(60000);
                             int responseCode = dlConn.getResponseCode();
-                            if (responseCode != 200) return false;
+                            if (responseCode != 200) return null;
 
                             long totalSize = dlConn.getContentLengthLong();
                             long downloaded = 0;
@@ -504,15 +504,15 @@ public class PackUpdaterConfigScreen extends Screen {
                                 showToast("Update downloaded: " + name);
                             });
 
-                            return true;
+                            return target;
                         }
                     }
                 }
             }
-            return false;
+            return null;
         } catch (Exception e) {
             System.err.println("[PackUpdater] Download failed: " + e.getMessage());
-            return false;
+            return null;
         }
     }
 
@@ -589,11 +589,49 @@ public class PackUpdaterConfigScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal("Browse .apepack"),
                     button -> {
-                        ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
-                            Path instanceRoot = Path.of(".");
-                            // Show diff screen before installing
-                            ApePackDiffScreen diffScreen = new ApePackDiffScreen(this, selectedPath, instanceRoot);
-                            minecraft.setScreen(diffScreen);
+                        final PackUpdaterConfigScreen configScreen = this;
+                        ApePackFilePicker filePicker = new ApePackFilePicker(configScreen, selectedPath -> {
+                            // Extract first, then show diff screen
+                            final Path apepackForDiff = selectedPath;
+                            Thread extractThread = new Thread(() -> {
+                                try {
+                                    Path instanceRoot = PackUpdaterMod.INSTANCE_ROOT;
+                                    ApePackLoaderV2.installApePackWithProgress(
+                                        apepackForDiff, instanceRoot,
+                                        new ApePackLoaderV2.ImportProgress() {
+                                            @Override public void onFileStart(String f, String t, int c, int total) {}
+                                            @Override public void onFileInstalled(String f) {}
+                                            @Override public void onFileSkipped(String f) {}
+                                            @Override public void onFileProtected(String f) {}
+                                            @Override public void onPackInfo(String n, String v) {
+                                                ConfigManager.updateModpackName(n);
+                                            }
+                                            @Override public void onComplete(boolean success, String error) {
+                                                if (success) {
+                                                    try {
+                                                        String version = PackUpdaterMod.extractApePackVersion(apepackForDiff);
+                                                        if (version != null) ConfigManager.updateModpackVersion(version);
+                                                    } catch (Exception ignored) {}
+                                                }
+                                                Minecraft.getInstance().execute(() -> {
+                                                    if (success) {
+                                                        ApePackDiffScreen diffScreen = new ApePackDiffScreen(
+                                                            configScreen, apepackForDiff, instanceRoot);
+                                                        minecraft.setScreen(diffScreen);
+                                                    } else {
+                                                        configScreen.showToast("Extraction failed: " + error);
+                                                    }
+                                                });
+                                            }
+                                        });
+                                } catch (Exception e) {
+                                    System.err.println("[PackUpdater] Browse extract exception: " + e.getMessage());
+                                    Minecraft.getInstance().execute(() -> {
+                                        configScreen.showToast("Extraction failed: " + e.getMessage());
+                                    });
+                                }
+                            }, "PackUpdater-BrowseExtract");
+                            extractThread.start();
                         });
                         minecraft.setScreen(filePicker);
                     }
@@ -695,20 +733,83 @@ public class PackUpdaterConfigScreen extends Screen {
         }
 
         Thread downloadThread = new Thread(() -> {
-            boolean success = downloadLatestApePackWithStats(ConfigManager.repo);
-            Minecraft.getInstance().execute(() -> {
-                downloading = false;
-                downloadPaused = false;
-                if (success) {
-                    downloadProgress = 1.0;
-                    downloadStatus = "Download complete! Restart to install.";
-                    statusText = Component.literal("Update downloaded! Restart to install.");
-                    showToast("Update downloaded! Restart to install.");
-                    if (downloadPackButton != null) {
-                        downloadPackButton.setMessage(Component.literal("Download Update"));
-                        downloadPackButton.active = true;
+            final PackUpdaterConfigScreen configScreen = PackUpdaterConfigScreen.this;
+            Path downloadedFile = downloadLatestApePackWithStatsAndReturn(ConfigManager.repo);
+            if (downloadedFile != null && Files.exists(downloadedFile)) {
+                // Extract immediately in background, then show diff screen
+                final Path apepackForDiff = downloadedFile;
+                configScreen.statusText = Component.literal("Extracting update...");
+                configScreen.downloadStatus = "Extracting...";
+                
+                Thread extractThread = new Thread(() -> {
+                    try {
+                        Path instanceRoot = PackUpdaterMod.INSTANCE_ROOT;
+                        ApePackLoaderV2.installApePackWithProgress(
+                            apepackForDiff, instanceRoot,
+                            new ApePackLoaderV2.ImportProgress() {
+                                @Override public void onFileStart(String f, String t, int c, int total) {
+                                    Minecraft.getInstance().execute(() -> {
+                                        configScreen.downloadStatus = "Extracting: " + f + " (" + c + "/" + total + ")";
+                                        configScreen.downloadProgress = (double) c / total;
+                                    });
+                                }
+                                @Override public void onFileInstalled(String f) {}
+                                @Override public void onFileSkipped(String f) {}
+                                @Override public void onFileProtected(String f) {}
+                                @Override public void onPackInfo(String n, String v) {
+                                    ConfigManager.updateModpackName(n);
+                                }
+                                @Override public void onComplete(boolean success, String error) {
+                                    if (success) {
+                                        ApePackLoaderV2.markApePackAsProcessed(apepackForDiff);
+                                        try {
+                                            String version = PackUpdaterMod.extractApePackVersion(apepackForDiff);
+                                            if (version != null) ConfigManager.updateModpackVersion(version);
+                                        } catch (Exception ignored) {}
+                                    }
+                                    // Show diff screen on main thread (don't delete .apepack yet, diff screen needs it)
+                                    final boolean extractSuccess = success;
+                                    final String extractError = error;
+                                    Minecraft.getInstance().execute(() -> {
+                                        configScreen.downloading = false;
+                                        configScreen.downloadPaused = false;
+                                        if (extractSuccess) {
+                                            // Show diff screen
+                                            ApePackDiffScreen diffScreen = new ApePackDiffScreen(
+                                                configScreen, apepackForDiff, instanceRoot);
+                                            minecraft.setScreen(diffScreen);
+                                        } else {
+                                            configScreen.downloadStatus = "Extraction failed: " + extractError;
+                                            configScreen.statusText = Component.literal("Extraction failed");
+                                            configScreen.showToast("Extraction failed: " + extractError);
+                                            if (configScreen.downloadPackButton != null) {
+                                                configScreen.downloadPackButton.setMessage(Component.literal("Download Update"));
+                                                configScreen.downloadPackButton.active = true;
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                    } catch (Exception e) {
+                        System.err.println("[PackUpdater] Extraction exception: " + e.getMessage());
+                        Minecraft.getInstance().execute(() -> {
+                            configScreen.downloading = false;
+                            configScreen.downloadStatus = "Extraction failed: " + e.getMessage();
+                            configScreen.statusText = Component.literal("Extraction failed");
+                            configScreen.showToast("Extraction failed");
+                            if (configScreen.downloadPackButton != null) {
+                                configScreen.downloadPackButton.setMessage(Component.literal("Download Update"));
+                                configScreen.downloadPackButton.active = true;
+                            }
+                        });
                     }
-                } else {
+                }, "PackUpdater-Extract");
+                extractThread.setDaemon(false);
+                extractThread.start();
+            } else {
+                Minecraft.getInstance().execute(() -> {
+                    downloading = false;
+                    downloadPaused = false;
                     downloadStatus = "Download failed";
                     statusText = Component.literal("Download failed");
                     showToast("Download failed");
@@ -716,14 +817,14 @@ public class PackUpdaterConfigScreen extends Screen {
                         downloadPackButton.setMessage(Component.literal("Download Update"));
                         downloadPackButton.active = true;
                     }
-                }
-            });
+                });
+            }
         }, "PackUpdater-Download");
         downloadThread.setDaemon(true);
         downloadThread.start();
     }
     
-    private boolean downloadLatestApePackWithStats(String repo) {
+    private Path downloadLatestApePackWithStatsAndReturn(String repo) {
         try {
             String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
             URL url = URI.create(apiUrl).toURL();
@@ -732,7 +833,7 @@ public class PackUpdaterConfigScreen extends Screen {
             ConfigManager.setupGitHubConnection(conn);
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(30000);
-            if (conn.getResponseCode() != 200) return false;
+            if (conn.getResponseCode() != 200) return null;
 
             BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
             JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
@@ -757,7 +858,7 @@ public class PackUpdaterConfigScreen extends Screen {
                             dlConn.setConnectTimeout(5000);
                             dlConn.setReadTimeout(60000);
                             int responseCode = dlConn.getResponseCode();
-                            if (responseCode != 200) return false;
+                            if (responseCode != 200) return null;
 
                             long totalSize = dlConn.getContentLengthLong();
                             long downloaded = 0;
@@ -795,31 +896,31 @@ public class PackUpdaterConfigScreen extends Screen {
 
                             Minecraft.getInstance().execute(() -> {
                                 downloadProgress = 1.0;
-                                downloadStatus = "Download complete!";
+                                downloadStatus = "Download complete! Extracting...";
                                 statsText = "Total: " + formatSize(totalSize);
                                 showToast("Update downloaded: " + name);
                             });
 
-                            return true;
+                            return target;
                         }
                     }
                 }
             }
-            return false;
+            return null;
         } catch (Exception e) {
             System.err.println("[PackUpdater] Download failed: " + e.getMessage());
-            return false;
+            return null;
         }
     }
     
     private void resumeDownload() {
         // Simplified resume - restarts download from beginning for reliability
         Thread downloadThread = new Thread(() -> {
-            boolean success = downloadLatestApePackWithStats(ConfigManager.repo);
+            Path downloadedFile = downloadLatestApePackWithStatsAndReturn(ConfigManager.repo);
             Minecraft.getInstance().execute(() -> {
                 downloading = false;
                 downloadPaused = false;
-                if (success) {
+                if (downloadedFile != null && Files.exists(downloadedFile)) {
                     downloadProgress = 1.0;
                     downloadStatus = "Download complete!";
                     showToast("Download complete!");

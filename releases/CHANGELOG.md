@@ -4,6 +4,20 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.2.2] - Diff Screen Fix & Update Flow Overhaul - 2026-11-09
+
+### Fixed
+- **Diff screen blank content** — Complete rewrite of rendering using a flat item list with proper scroll offset clamping. The content area now correctly displays all mods, configs, and summary information with working scroll
+- **Update flow restructured** — The entire update flow now works correctly: download → extract immediately → show comparison screen → user chooses to restart or go to main menu
+
+### Changed
+- **Download flow** — After downloading an .apepack2, the mod extracts it immediately in the background, then shows the comparison screen
+- **Startup flow** — On game launch, if an unprocessed .apepack is found, it extracts silently then shows the comparison screen instead of auto-restarting
+- **Browse .apepack flow** — Manual .apepack installation now extracts first, then shows the comparison screen
+- **Diff screen buttons** — "Update Now (Restart)" renamed to "Restart to Apply" since extraction is already done
+
+---
+
 ## [1.2.1] - Startup Extraction Fix - 2026-11-08
 
 ### Fixed

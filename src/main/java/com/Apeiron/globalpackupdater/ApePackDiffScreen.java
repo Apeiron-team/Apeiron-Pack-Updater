@@ -215,46 +215,20 @@ public class ApePackDiffScreen extends Screen {
         ).bounds(startX + 2 * (tabWidth + gap), tabBarY, tabWidth, tabHeight).build());
         
         // Action buttons at bottom
+        // Note: Extraction is already done before showing this screen, so we just restart
         this.updateNowBtn = Button.builder(
-                Component.literal("Update Now (Restart)"),
+                Component.literal("Restart to Apply"),
                 b -> {
                     b.active = false;
                     b.setMessage(Component.literal("Starting..."));
-                    // Install the .apepack and restart
-                    Thread installThread = new Thread(() -> {
-                        ApePackLoaderV2.InstallResult result = ApePackLoaderV2.installApePackWithProgress(
-                                apepackFile, instanceRoot,
-                                new ApePackLoaderV2.ImportProgress() {
-                                    @Override public void onFileStart(String f, String t, int c, int total) {}
-                                    @Override public void onFileInstalled(String f) {}
-                                    @Override public void onFileSkipped(String f) {}
-                                    @Override public void onFileProtected(String f) {}
-                                    @Override public void onPackInfo(String n, String v) {
-                                        ConfigManager.updateModpackName(n);
-                                    }
-                                    @Override public void onComplete(boolean success, String error) {
-                                        if (success) {
-                                            ApePackLoaderV2.markApePackAsProcessed(apepackFile);
-                                            if (!newPackVersion.isEmpty()) {
-                                                ConfigManager.updateModpackVersion(newPackVersion);
-                                            }
-                                            try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
-                                            Minecraft.getInstance().execute(() -> {
-                                                GameRelauncher.relaunch();
-                                                System.exit(0);
-                                            });
-                                        } else {
-                                            Minecraft.getInstance().execute(() -> {
-                                                if (updateNowBtn != null) {
-                                                    updateNowBtn.active = true;
-                                                    updateNowBtn.setMessage(Component.literal("Update Failed"));
-                                                }
-                                            });
-                                        }
-                                    }
-                                });
-                    }, "PackUpdater-Install");
-                    installThread.start();
+                    // Clean up the .apepack file and restart
+                    try { ApePackLoaderV2.markApePackAsProcessed(apepackFile); } catch (Exception ignored) {}
+                    if (!newPackVersion.isEmpty()) {
+                        ConfigManager.updateModpackVersion(newPackVersion);
+                    }
+                    try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
+                    GameRelauncher.relaunch();
+                    System.exit(0);
                 }
         ).bounds(centerX - 160, this.height - 40, 150, 20).build();
         addRenderableWidget(this.updateNowBtn);
@@ -262,6 +236,9 @@ public class ApePackDiffScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("Back to Main Menu"),
                 b -> {
+                    // Clean up the .apepack file
+                    try { ApePackLoaderV2.markApePackAsProcessed(apepackFile); } catch (Exception ignored) {}
+                    try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
                     Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
                 }
         ).bounds(centerX + 10, this.height - 40, 150, 20).build());
@@ -348,114 +325,100 @@ public class ApePackDiffScreen extends Screen {
         
         guiGraphics.fill(panelLeft, panelTop, panelLeft + panelWidth, panelBottom, 0x40000000);
         
-        int y = panelTop + 5;
-        int visibleRows = (panelBottom - panelTop) / ROW_HEIGHT;
+        // Build a flat list of items for the current section, then render with scroll offset
+        List<RenderItem> items = new ArrayList<>();
         
         switch (activeSection) {
             case MODS -> {
-                // Added mods
                 if (!addedMods.isEmpty()) {
-                    if (scrollOffset == 0 || y >= panelTop) {
-                        guiGraphics.centeredText(this.font, "Added Mods (" + addedMods.size() + ")", centerX, y, 0x55FF55);
-                        y += ROW_HEIGHT;
-                    }
-                    int startIdx = Math.max(0, scrollOffset - 1);
-                    for (int i = startIdx; i < addedMods.size() && y < panelBottom; i++) {
-                        String mod = addedMods.get(i);
-                        if (mod.length() > 50) mod = "..." + mod.substring(mod.length() - 47);
-                        guiGraphics.centeredText(this.font, "+ " + mod, centerX, y, 0x55FF55);
-                        y += ROW_HEIGHT;
-                        if (i < scrollOffset) scrollOffset = i + 1;
+                    items.add(new RenderItem("Added Mods (" + addedMods.size() + ")", 0x55FF55, true));
+                    for (String mod : addedMods) {
+                        String display = mod;
+                        if (display.length() > 50) display = "..." + display.substring(display.length() - 47);
+                        items.add(new RenderItem("+ " + display, 0x55FF55, false));
                     }
                 }
-                
-                // Updated mods
                 if (!updatedMods.isEmpty()) {
-                    if (y < panelBottom) {
-                        guiGraphics.centeredText(this.font, "Updated Mods (" + updatedMods.size() + ")", centerX, y, 0xFFFF55);
-                        y += ROW_HEIGHT;
-                    }
+                    items.add(new RenderItem("Updated Mods (" + updatedMods.size() + ")", 0xFFFF55, true));
                     for (String mod : updatedMods) {
-                        if (y >= panelBottom) break;
                         String display = mod;
                         if (display.length() > 50) display = "..." + display.substring(display.length() - 47);
-                        guiGraphics.centeredText(this.font, "~ " + display, centerX, y, 0xFFFF55);
-                        y += ROW_HEIGHT;
+                        items.add(new RenderItem("~ " + display, 0xFFFF55, false));
                     }
                 }
-                
-                // Removed mods
                 if (!removedMods.isEmpty()) {
-                    if (y < panelBottom) {
-                        guiGraphics.centeredText(this.font, "Removed Mods (" + removedMods.size() + ")", centerX, y, 0xFF5555);
-                        y += ROW_HEIGHT;
-                    }
+                    items.add(new RenderItem("Removed Mods (" + removedMods.size() + ")", 0xFF5555, true));
                     for (String mod : removedMods) {
-                        if (y >= panelBottom) break;
                         String display = mod;
                         if (display.length() > 50) display = "..." + display.substring(display.length() - 47);
-                        guiGraphics.centeredText(this.font, "- " + display, centerX, y, 0xFF5555);
-                        y += ROW_HEIGHT;
+                        items.add(new RenderItem("- " + display, 0xFF5555, false));
                     }
                 }
-                
-                // Unchanged
-                if (!unchangedMods.isEmpty() && y < panelBottom) {
-                    guiGraphics.centeredText(this.font, "Unchanged: " + unchangedMods.size() + " mods", centerX, y, 0x888888);
+                if (!unchangedMods.isEmpty()) {
+                    items.add(new RenderItem("Unchanged: " + unchangedMods.size() + " mods", 0x888888, false));
                 }
-                
                 if (addedMods.isEmpty() && updatedMods.isEmpty() && removedMods.isEmpty()) {
-                    guiGraphics.centeredText(this.font, "No mod changes detected", centerX, y, 0x888888);
+                    items.add(new RenderItem("No mod changes detected", 0x888888, false));
                 }
             }
             
             case CONFIGS -> {
                 if (!addedConfigs.isEmpty()) {
-                    guiGraphics.centeredText(this.font, "New Configs (" + addedConfigs.size() + ")", centerX, y, 0x55FF55);
-                    y += ROW_HEIGHT;
+                    items.add(new RenderItem("New Configs (" + addedConfigs.size() + ")", 0x55FF55, true));
                     for (String cfg : addedConfigs) {
-                        if (y >= panelBottom) break;
-                        guiGraphics.centeredText(this.font, "+ " + cfg, centerX, y, 0x55FF55);
-                        y += ROW_HEIGHT;
+                        items.add(new RenderItem("+ " + cfg, 0x55FF55, false));
                     }
                 }
                 if (!updatedConfigs.isEmpty()) {
-                    guiGraphics.centeredText(this.font, "Updated Configs (" + updatedConfigs.size() + ")", centerX, y, 0xFFFF55);
-                    y += ROW_HEIGHT;
+                    items.add(new RenderItem("Updated Configs (" + updatedConfigs.size() + ")", 0xFFFF55, true));
                     for (String cfg : updatedConfigs) {
-                        if (y >= panelBottom) break;
-                        guiGraphics.centeredText(this.font, "~ " + cfg, centerX, y, 0xFFFF55);
-                        y += ROW_HEIGHT;
+                        items.add(new RenderItem("~ " + cfg, 0xFFFF55, false));
                     }
                 }
                 if (addedConfigs.isEmpty() && updatedConfigs.isEmpty()) {
-                    guiGraphics.centeredText(this.font, "No config changes", centerX, y, 0x888888);
+                    items.add(new RenderItem("No config changes", 0x888888, false));
                 }
             }
             
             case SUMMARY -> {
-                guiGraphics.centeredText(this.font, "Update Summary", centerX, y, 0x88CCFF);
-                y += ROW_HEIGHT * 2;
-                
-                guiGraphics.centeredText(this.font, "Mods Added: " + addedMods.size(), centerX, y, 0x55FF55);
-                y += ROW_HEIGHT;
-                guiGraphics.centeredText(this.font, "Mods Updated: " + updatedMods.size(), centerX, y, 0xFFFF55);
-                y += ROW_HEIGHT;
-                guiGraphics.centeredText(this.font, "Mods Removed: " + removedMods.size(), centerX, y, 0xFF5555);
-                y += ROW_HEIGHT;
-                guiGraphics.centeredText(this.font, "Mods Unchanged: " + unchangedMods.size(), centerX, y, 0x888888);
-                y += ROW_HEIGHT * 2;
-                
-                guiGraphics.centeredText(this.font, "Configs Added: " + addedConfigs.size(), centerX, y, 0x55FF55);
-                y += ROW_HEIGHT;
-                guiGraphics.centeredText(this.font, "Configs Updated: " + updatedConfigs.size(), centerX, y, 0xFFFF55);
-                y += ROW_HEIGHT * 2;
-                
-                guiGraphics.centeredText(this.font, "Choose your action below:", centerX, y, 0xCCCCCC);
+                items.add(new RenderItem("Update Summary", 0x88CCFF, true));
+                items.add(new RenderItem("", 0xFFFFFF, false)); // spacer
+                items.add(new RenderItem("Mods Added: " + addedMods.size(), 0x55FF55, false));
+                items.add(new RenderItem("Mods Updated: " + updatedMods.size(), 0xFFFF55, false));
+                items.add(new RenderItem("Mods Removed: " + removedMods.size(), 0xFF5555, false));
+                items.add(new RenderItem("Mods Unchanged: " + unchangedMods.size(), 0x888888, false));
+                items.add(new RenderItem("", 0xFFFFFF, false)); // spacer
+                items.add(new RenderItem("Configs Added: " + addedConfigs.size(), 0x55FF55, false));
+                items.add(new RenderItem("Configs Updated: " + updatedConfigs.size(), 0xFFFF55, false));
+                items.add(new RenderItem("", 0xFFFFFF, false)); // spacer
+                items.add(new RenderItem("Choose your action below:", 0xCCCCCC, false));
             }
         }
         
+        // Render items with scroll offset
+        int visibleRows = (panelBottom - panelTop) / ROW_HEIGHT;
+        int maxScroll = Math.max(0, items.size() - visibleRows);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+        
+        int y = panelTop + 5;
+        for (int i = scrollOffset; i < items.size() && y < panelBottom - ROW_HEIGHT; i++) {
+            RenderItem item = items.get(i);
+            guiGraphics.centeredText(this.font, item.text, centerX, y, item.color);
+            y += ROW_HEIGHT;
+        }
+        
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+    }
+    
+    private static class RenderItem {
+        final String text;
+        final int color;
+        final boolean isHeader;
+        RenderItem(String text, int color, boolean isHeader) {
+            this.text = text;
+            this.color = color;
+            this.isHeader = isHeader;
+        }
     }
     
     @Override

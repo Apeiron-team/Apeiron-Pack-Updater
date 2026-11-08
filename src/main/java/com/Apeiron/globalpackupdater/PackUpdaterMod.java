@@ -25,7 +25,7 @@ import java.util.stream.Stream;
 @Mod("packupdater")
 public class PackUpdaterMod {
     private static final String CURRENT_VERSION = ConfigManager.CURRENT_VERSION;
-    private static final Path INSTANCE_ROOT = Paths.get(".").toAbsolutePath().normalize();
+    static final Path INSTANCE_ROOT = Paths.get(".").toAbsolutePath().normalize();
     private static PackUpdaterMod instance;
 
     /**
@@ -137,16 +137,18 @@ public class PackUpdaterMod {
                                             }
                                             @Override public void onComplete(boolean success, String error) {
                                                 if (success) {
-                                                    ApePackLoaderV2.markApePackAsProcessed(finalApepackFile);
+                                                    System.out.println("[PackUpdater] Extraction complete, showing diff screen...");
+                                                    // Don't delete the .apepack yet - diff screen needs it
+                                                    // Don't mark as processed yet - diff screen may cancel
                                                     try {
                                                         String version = extractApePackVersion(finalApepackFile);
                                                         if (version != null) ConfigManager.updateModpackVersion(version);
                                                     } catch (Exception ignored) {}
-                                                    try { Files.deleteIfExists(finalApepackFile); } catch (Exception ignored) {}
-                                                    System.out.println("[PackUpdater] Extraction complete, auto-restarting game...");
+                                                    // Show diff screen so user can see what changed before restarting
                                                     Minecraft.getInstance().execute(() -> {
-                                                        GameRelauncher.relaunch();
-                                                        System.exit(0);
+                                                        ApePackDiffScreen diffScreen = new ApePackDiffScreen(
+                                                            null, finalApepackFile, INSTANCE_ROOT);
+                                                        Minecraft.getInstance().setScreen(diffScreen);
                                                     });
                                                 } else {
                                                     System.err.println("[PackUpdater] Extraction failed: " + error);
@@ -185,7 +187,7 @@ public class PackUpdaterMod {
     /**
      * Extracts the pack version from an .apepack file by reading apepack.json inside the ZIP.
      */
-    private static String extractApePackVersion(Path apepackFile) {
+    static String extractApePackVersion(Path apepackFile) {
         try {
             java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(apepackFile.toFile());
             java.util.zip.ZipEntry entry = zipFile.getEntry("apepack.json");
