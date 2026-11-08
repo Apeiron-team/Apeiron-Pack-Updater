@@ -2,6 +2,19 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.25] - 2026-11-08
+
+### Fixed
+- **Import screen allows early exit** — Added `CountDownLatch` that blocks ALL exit attempts (ESC, close button, mouse clicks, keyboard input) until the background extraction thread fully finishes. The import thread is now non-daemon so it won't be killed if the game tries to exit
+- **Files not extracted to correct locations** — Added detailed logging for each file extraction (shows source file name and absolute target path) so extraction failures are visible in logs. Added null check for `targetPath.getParent()` before creating directories
+- **Missing extraction feedback** — Import screen now shows "⚠ Do not close the game until extraction is complete" warning during extraction. Added `shouldClose()` override to prevent Minecraft from auto-closing the screen mid-extraction
+
+### Changed
+- Import thread logs the extraction target directory at startup for debugging
+- Each installed file logs its absolute path after extraction
+- Missing zip entries log both the expected path and the file name
+- Import thread prints summary of installed/skipped/protected counts on completion
+
 ## [0.0.24] - 2026-11-08
 
 ### Fixed

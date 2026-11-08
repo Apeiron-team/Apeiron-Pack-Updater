@@ -11,16 +11,23 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Loading screen shown during .apepack import.
  * Displays a progress bar, current file being processed, and a summary on completion.
  * After completion, prompts the user to restart the game.
+ * Blocks ALL exit attempts until extraction is fully complete.
  */
 public class ApePackImportScreen extends Screen {
 
     private final Screen parent;
     private final java.nio.file.Path apepackFile;
     private final java.nio.file.Path instanceRoot;
+
+    // Latch to block exit until import thread finishes
+    private final CountDownLatch importLatch = new CountDownLatch(1);
 
     // Progress state
     private String currentFile = "";
@@ -91,10 +98,14 @@ public class ApePackImportScreen extends Screen {
 
     /**
      * Start the import process on a background thread.
+     * The import latch blocks all exit attempts until the thread finishes.
      */
     public void startImport() {
         Thread importThread = new Thread(() -> {
             try {
+                System.out.println("[PackUpdater] Starting .apepack import: " + apepackFile.getFileName());
+                System.out.println("[PackUpdater] Extracting to: " + instanceRoot.toAbsolutePath());
+
                 ApePackLoader.InstallResult result = ApePackLoader.installApePackWithProgress(
                         apepackFile, instanceRoot,
                         new ApePackLoader.ImportProgress() {
@@ -171,7 +182,14 @@ public class ApePackImportScreen extends Screen {
                                 });
                             }
                         });
+
+                if (result != null && result.success) {
+                    System.out.println("[PackUpdater] Import finished: " + result.newFilesInstalled + " installed, " +
+                            result.skippedDuplicates + " skipped, " + result.skippedProtected + " protected");
+                }
             } catch (Exception e) {
+                System.err.println("[PackUpdater] Import thread exception: " + e.getMessage());
+                e.printStackTrace();
                 Minecraft.getInstance().execute(() -> {
                     importComplete = true;
                     importSuccess = false;
@@ -181,9 +199,13 @@ public class ApePackImportScreen extends Screen {
                     clearWidgets();
                     init();
                 });
+            } finally {
+                // ALWAYS release the latch so the screen can close
+                System.out.println("[PackUpdater] Import thread finishing, releasing exit latch...");
+                importLatch.countDown();
             }
         }, "PackUpdater-Import");
-        importThread.setDaemon(true);
+        importThread.setDaemon(false); // Non-daemon so it doesn't get killed on exit
         importThread.start();
     }
 
@@ -256,6 +278,9 @@ public class ApePackImportScreen extends Screen {
                     "New: " + newFilesInstalled + " | Skipped: " + skippedDuplicates + " | Protected: " + skippedProtected,
                     centerX, barY + barHeight + 50, 0xCCCCCC);
 
+            // Warning message - do not close
+            guiGraphics.centeredText(this.font, "⚠ Do not close the game until extraction is complete", centerX, barY + barHeight + 75, 0xFF9933);
+
         } else {
             // Summary
             int summaryY = startY + 50;
@@ -304,9 +329,16 @@ public class ApePackImportScreen extends Screen {
 
     @Override
     public void onClose() {
-        // Block closing during import
+        // Block closing until import thread is truly finished
         if (!importComplete) {
+            System.out.println("[PackUpdater] Blocked close attempt — import still running...");
             return;
+        }
+        // Wait for the import thread to fully finish (in case there's cleanup)
+        try {
+            importLatch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         Minecraft.getInstance().setScreen(this.parent);
     }
@@ -356,4 +388,5 @@ public class ApePackImportScreen extends Screen {
         }
         return super.keyPressed(event);
     }
+
 }

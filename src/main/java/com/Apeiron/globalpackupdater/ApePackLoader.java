@@ -522,7 +522,9 @@ public class ApePackLoader {
 
                 if (!isDuplicate) {
                     // Ensure parent directory exists
-                    Files.createDirectories(targetPath.getParent());
+                    if (targetPath.getParent() != null) {
+                        Files.createDirectories(targetPath.getParent());
+                    }
 
                     // If replacing a mod, delete old versions with the same base name first
                     if ("mod".equals(entry.type) && Files.exists(targetPath)) {
@@ -548,10 +550,12 @@ public class ApePackLoader {
                         try (InputStream is = zipFile.getInputStream(fileEntry)) {
                             Files.copy(is, targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                             installed.add(entry.name + " (" + entry.type + ")");
+                            System.out.println("[PackUpdater] Installed: " + entry.name + " -> " + targetPath.toAbsolutePath());
                             if (progress != null) progress.onFileInstalled(entry.name);
                         }
                     } else {
-                        System.err.println("[PackUpdater] File not found in archive: " + entry.filePath);
+                        System.err.println("[PackUpdater] File not found in archive: " + entry.filePath +
+                                " (expected in zip for: " + entry.name + ")");
                     }
                 }
             }
