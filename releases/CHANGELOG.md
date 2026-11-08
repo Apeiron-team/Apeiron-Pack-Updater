@@ -2,6 +2,11 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.30] - 2026-11-08
+
+### Fixed
+- **Crash on startup** — Registering a listener on the abstract `RenderGuiLayerEvent` class caused an `IllegalArgumentException`. Fixed by using `RenderGuiLayerEvent.Post` (concrete subclass) instead, which properly fires after GUI layers render
+
 ## [0.0.29] - 2026-11-08
 
 ### Added

@@ -24,7 +24,7 @@ public class PackVersionOverlay {
     }
 
     @SubscribeEvent
-    public void onRenderOverlay(RenderGuiLayerEvent event) {
+    public void onRenderOverlay(RenderGuiLayerEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof TitleScreen && !renderedThisTick) {
             renderedThisTick = true;
