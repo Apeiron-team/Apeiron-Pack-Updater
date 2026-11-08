@@ -2,6 +2,15 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.33] - 2026-11-08
+
+### Added
+- **Auto-restart Game feature** — The mod can now spawn a new JVM process to relaunch Minecraft automatically without closing the game. When the "🔄 Restart Game" button is clicked after an .apepack import, the mod reads the NeoForge and Minecraft version JSONs, reconstructs the full launch command (all libraries, JVM args, game args, natives extraction), spawns a fresh Java process, and exits the current JVM. This eliminates the need to manually restart through the launcher.
+
+### Changed
+- Import screen now shows three buttons on completion: "🔄 Restart Game" (auto-relaunch), "Back to Title" (navigate to title screen), and "Stay in Game" (return to config)
+- The restart button shows "⏳ Starting..." while the new JVM is being spawned, and "❌ Restart Failed" if the relaunch fails
+
 ## [0.0.32] - 2026-11-08
 
 ### Fixed

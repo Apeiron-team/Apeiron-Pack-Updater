@@ -48,6 +48,7 @@ public class ApePackImportScreen extends Screen {
     // UI elements
     private Button restartButton;
     private Button doneButton;
+    private Button relaunchButton;
 
     public ApePackImportScreen(Screen parent, java.nio.file.Path apepackFile, java.nio.file.Path instanceRoot) {
         super(Component.literal("Importing .apepack..."));
@@ -71,20 +72,48 @@ public class ApePackImportScreen extends Screen {
 
         // Complete state — show restart and done buttons
         if (importSuccess) {
+            // "🔄 Restart Game" button — spawns a new JVM to relaunch Minecraft
+            this.relaunchButton = this.addRenderableWidget(Button.builder(
+                    Component.literal("🔄 Restart Game"),
+                    button -> {
+                        // Block the button to prevent double-clicks
+                        button.active = false;
+                        button.setMessage(Component.literal("⏳ Starting..."));
+
+                        // Run relaunch on a background thread to avoid blocking the UI
+                        Thread relaunchThread = new Thread(() -> {
+                            boolean success = GameRelauncher.relaunch();
+                            Minecraft.getInstance().execute(() -> {
+                                if (success) {
+                                    // Exit the current JVM — the new process will take over
+                                    System.out.println("[PackUpdater] Exiting current JVM after successful relaunch...");
+                                    System.exit(0);
+                                } else {
+                                    System.err.println("[PackUpdater] Relaunch failed, falling back to title screen.");
+                                    button.active = true;
+                                    button.setMessage(Component.literal("❌ Restart Failed"));
+                                }
+                            });
+                        }, "PackUpdater-Relaunch");
+                        relaunchThread.setDaemon(true);
+                        relaunchThread.start();
+                    }
+            ).bounds(centerX - 160, this.height / 6 + 250, 115, 20).build());
+
             this.restartButton = this.addRenderableWidget(Button.builder(
                     Component.literal("Back to Title"),
                     button -> {
-                        // Navigate to title screen (full restart requires launcher)
+                        // Navigate to title screen (no full restart)
                         Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
                     }
-            ).bounds(centerX - 120, this.height / 6 + 250, 115, 20).build());
+            ).bounds(centerX - 40, this.height / 6 + 250, 115, 20).build());
 
             this.doneButton = this.addRenderableWidget(Button.builder(
                     Component.literal("Stay in Game"),
                     button -> {
                         Minecraft.getInstance().setScreen(this.parent);
                     }
-            ).bounds(centerX + 5, this.height / 6 + 250, 115, 20).build());
+            ).bounds(centerX + 80, this.height / 6 + 250, 115, 20).build());
         } else {
             // Failed — just a back button
             this.addRenderableWidget(Button.builder(
