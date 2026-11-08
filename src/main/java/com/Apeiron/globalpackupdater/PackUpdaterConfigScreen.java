@@ -24,24 +24,21 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Complete overhaul of the PackUpdater config screen with a clean tabbed interface.
- * Uses custom tab system since TabManager is not available in MC 26.1.2.
+ * PackUpdater config screen with a clean tabbed interface.
  * 
  * Tabs:
- * - Updates: Check for and download .apepack updates from GitHub
- * - Apepacks: Browse and manage downloaded .apepack files
+ * - Apepacks: Browse and install .apepack files
  * - Generate: Create .apepack files from the current instance
  * - Settings: GitHub repo, token, channel selection
  */
 public class PackUpdaterConfigScreen extends Screen {
 
-    enum TabId { UPDATES, APEPACKS, GENERATE, SETTINGS }
+    enum TabId { APEPACKS, GENERATE, SETTINGS }
     
     private final Screen parent;
-    private TabId activeTab = TabId.UPDATES;
+    private TabId activeTab = TabId.APEPACKS;
     
     // Tab buttons
-    private Button btnUpdates;
     private Button btnApepacks;
     private Button btnGenerate;
     private Button btnSettings;
@@ -65,18 +62,19 @@ public class PackUpdaterConfigScreen extends Screen {
     private EditBox packNameField;
     private EditBox packVersionField;
 
-    // Updates tab state
-    private Button checkButton;
-    private Button downloadButton = null;
-
     // Apepacks tab state
     private List<ApePackFileInfo> apepackFiles = new ArrayList<>();
     private int apepackScrollOffset = 0;
     private static final int APEPACK_ROW_HEIGHT = 22;
 
+    // Install failure state
+    private String installError = null;
+
     public PackUpdaterConfigScreen(Screen parent) {
         super(Component.literal("Apeiron Pack Updater"));
         this.parent = parent;
+        // Check for any install errors from startup
+        this.installError = PackUpdaterMod.lastInstallError.get();
     }
 
     @Override
@@ -95,14 +93,6 @@ public class PackUpdaterConfigScreen extends Screen {
         channelThread.setDaemon(true);
         channelThread.start();
 
-        // Reset download manager if stuck
-        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        if (dm.status == PackUpdaterMod.DownloadStatus.CHECKING 
-                || dm.status == PackUpdaterMod.DownloadStatus.DOWNLOADING
-                || dm.status == PackUpdaterMod.DownloadStatus.VERIFYING) {
-            dm.setIdle();
-        }
-
         // Build tab buttons
         buildTabButtons();
         
@@ -116,36 +106,30 @@ public class PackUpdaterConfigScreen extends Screen {
         int tabWidth = 80;
         int tabHeight = 20;
         int gap = 4;
-        int totalWidth = 4 * tabWidth + 3 * gap;
+        int totalWidth = 3 * tabWidth + 2 * gap;
         int startX = (this.width - totalWidth) / 2;
 
-        int[] positions = new int[4];
-        for (int i = 0; i < 4; i++) {
+        int[] positions = new int[3];
+        for (int i = 0; i < 3; i++) {
             positions[i] = startX + i * (tabWidth + gap);
         }
-
-        btnUpdates = addRenderableWidget(Button.builder(
-                Component.literal("Updates"),
-                b -> switchTab(TabId.UPDATES)
-        ).bounds(positions[0], tabBarY, tabWidth, tabHeight).build());
-        tabButtons.add(btnUpdates);
 
         btnApepacks = addRenderableWidget(Button.builder(
                 Component.literal("Apepacks"),
                 b -> switchTab(TabId.APEPACKS)
-        ).bounds(positions[1], tabBarY, tabWidth, tabHeight).build());
+        ).bounds(positions[0], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnApepacks);
 
         btnGenerate = addRenderableWidget(Button.builder(
                 Component.literal("Generate"),
                 b -> switchTab(TabId.GENERATE)
-        ).bounds(positions[2], tabBarY, tabWidth, tabHeight).build());
+        ).bounds(positions[1], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnGenerate);
 
         btnSettings = addRenderableWidget(Button.builder(
                 Component.literal("Settings"),
                 b -> switchTab(TabId.SETTINGS)
-        ).bounds(positions[3], tabBarY, tabWidth, tabHeight).build());
+        ).bounds(positions[2], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnSettings);
 
         updateTabButtonStyles();
@@ -187,13 +171,10 @@ public class PackUpdaterConfigScreen extends Screen {
         for (Button btn : tabButtons) {
             btn.active = true;
         }
-        // Style active tab button (brighter)
-        // (handled in render via background drawing)
     }
 
     private void buildTabContent() {
         switch (activeTab) {
-            case UPDATES -> buildUpdatesTab();
             case APEPACKS -> buildApepacksTab();
             case GENERATE -> buildGenerateTab();
             case SETTINGS -> buildSettingsTab();
@@ -234,194 +215,6 @@ public class PackUpdaterConfigScreen extends Screen {
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("github\\.com\\/([^/]+)\\/([^/]+)");
         java.util.regex.Matcher matcher = pattern.matcher(trimmed);
         if (matcher.find()) return matcher.group(1) + "/" + matcher.group(2);
-        return null;
-    }
-
-    private int compareVersions(String v1, String v2) {
-        if (v1 == null || v1.isEmpty()) return -1;
-        if (v2 == null || v2.isEmpty()) return 1;
-        if (v1.equals(v2)) return 0;
-        String[] parts1 = v1.split("[.+\\-_]");
-        String[] parts2 = v2.split("[.+\\-_]");
-        int maxLen = Math.max(parts1.length, parts2.length);
-        for (int i = 0; i < maxLen; i++) {
-            String p1 = i < parts1.length ? parts1[i] : "0";
-            String p2 = i < parts2.length ? parts2[i] : "0";
-            try {
-                long num1 = Long.parseLong(p1);
-                long num2 = Long.parseLong(p2);
-                if (num1 != num2) return Long.compare(num1, num2);
-            } catch (NumberFormatException e) {
-                int cmp = p1.compareTo(p2);
-                if (cmp != 0) return cmp;
-            }
-        }
-        return 0;
-    }
-
-    private static class UpdateCheckResult {
-        final boolean success;
-        final String message;
-        final String version;
-        final boolean updateAvailable;
-        UpdateCheckResult(boolean success, String message, String version, boolean updateAvailable) {
-            this.success = success;
-            this.message = message;
-            this.version = version;
-            this.updateAvailable = updateAvailable;
-        }
-    }
-
-    /**
-     * Checks for mod updates — compares GitHub release tags against the installed mod version.
-     */
-    private UpdateCheckResult checkForUpdates(String repo, String channel) {
-        return checkForModUpdates(repo, channel);
-    }
-
-    /**
-     * Checks for mod updates — compares GitHub release tags against the installed mod version.
-     */
-    private UpdateCheckResult checkForModUpdates(String repo, String channel) {
-        try {
-            String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
-            URL url = URI.create(apiUrl).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            ConfigManager.setupGitHubConnection(conn);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(10000);
-            if (conn.getResponseCode() != 200) {
-                String errorMsg = "GitHub API error: " + conn.getResponseCode();
-                if (conn.getResponseCode() == 403) {
-                    errorMsg = "Rate limit exceeded. Add a GitHub token in Settings.";
-                }
-                return new UpdateCheckResult(false, errorMsg, null, false);
-            }
-            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
-            reader.close();
-            if (releases.isEmpty()) return new UpdateCheckResult(false, "No releases found", null, false);
-            for (JsonElement element : releases) {
-                JsonObject release = element.getAsJsonObject();
-                String tagName = release.get("tag_name").getAsString();
-                boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
-                boolean match = false;
-                if (channel.equals("stable") && !isPrerelease) match = true;
-                else if (channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
-                else if (channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
-                if (match) {
-                    String cleanTag = tagName.replace("v", "").replace("V", "");
-                    boolean isNewer = compareVersions(cleanTag, ConfigManager.CURRENT_VERSION) > 0;
-                    return new UpdateCheckResult(true, "Latest: " + tagName, cleanTag, isNewer);
-                }
-            }
-            return new UpdateCheckResult(false, "No release for channel: " + channel, null, false);
-        } catch (Exception e) {
-            return new UpdateCheckResult(false, "Error: " + e.getMessage(), null, false);
-        }
-    }
-
-    /**
-     * Checks for pack (.apepack) updates — compares the .apepack version from GitHub release
-     * assets against the installed modpack version. Falls back to the release tag if no
-     * .apepack asset is found.
-     */
-    private UpdateCheckResult checkForPackUpdates(String repo, String channel) {
-        String localVersion = ConfigManager.modpackVersion;
-        if (localVersion == null || localVersion.isEmpty()) {
-            localVersion = "v0.0";
-        }
-        // Strip leading 'v' or 'V' for comparison
-        String localClean = localVersion.replaceFirst("^[vV]", "");
-
-        try {
-            String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
-            URL url = URI.create(apiUrl).toURL();
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            ConfigManager.setupGitHubConnection(conn);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(10000);
-            if (conn.getResponseCode() != 200) {
-                String errorMsg = "GitHub API error: " + conn.getResponseCode();
-                if (conn.getResponseCode() == 403) {
-                    errorMsg = "Rate limit exceeded. Add a GitHub token in Settings.";
-                }
-                return new UpdateCheckResult(false, errorMsg, null, false);
-            }
-            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
-            reader.close();
-            if (releases.isEmpty()) return new UpdateCheckResult(false, "No releases found", null, false);
-
-            // Track the highest .apepack version found across all matching releases
-            String latestApePackVersion = null;
-            String latestReleaseTag = null;
-
-            for (JsonElement element : releases) {
-                JsonObject release = element.getAsJsonObject();
-                String tagName = release.get("tag_name").getAsString();
-                boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
-                boolean match = false;
-                if (channel.equals("stable") && !isPrerelease) match = true;
-                else if (channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
-                else if (channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
-
-                if (match) {
-                    // Check for .apepack assets in this release
-                    if (release.has("assets") && release.get("assets").isJsonArray()) {
-                        JsonArray assets = release.get("assets").getAsJsonArray();
-                        for (JsonElement assetElem : assets) {
-                            JsonObject asset = assetElem.getAsJsonObject();
-                            String name = asset.get("name").getAsString();
-                            if (name.toLowerCase().endsWith(".apepack")) {
-                                // Extract version from the .apepack filename
-                                // Format: "packname-X.Y.Z.apepack" or "update-YYYY-MM-DD.apepack"
-                                String apePackVer = extractVersionFromApePackName(name);
-                                if (apePackVer != null) {
-                                    if (latestApePackVersion == null || compareVersions(apePackVer, latestApePackVersion) > 0) {
-                                        latestApePackVersion = apePackVer;
-                                        latestReleaseTag = tagName;
-                                    }
-                                }
-                                break; // Use first .apepack found in this release
-                            }
-                        }
-                    }
-                    // Do NOT fall back to mod release tag — that would compare mod versions
-                    // against pack versions, causing false "update available" notifications.
-                    // Only use .apepack asset versions for pack checks.
-                }
-            }
-
-            if (latestApePackVersion == null) {
-                // No .apepack assets on GitHub — the installed pack is the latest
-                System.out.println("[PackUpdater] Pack check: no .apepack on GitHub, local=" + localClean + " (up to date)");
-                return new UpdateCheckResult(true, "No .apepack on GitHub", localClean, false);
-            }
-
-            boolean isNewer = compareVersions(latestApePackVersion, localClean) > 0;
-            System.out.println("[PackUpdater] Pack check: GitHub=" + latestApePackVersion + ", local=" + localClean + ", isNewer=" + isNewer);
-            return new UpdateCheckResult(true, "Latest: " + (latestReleaseTag != null ? latestReleaseTag : latestApePackVersion), latestApePackVersion, isNewer);
-
-        } catch (Exception e) {
-            return new UpdateCheckResult(false, "Error: " + e.getMessage(), null, false);
-        }
-    }
-
-    /**
-     * Extracts version from an .apepack filename like "V-High-Q-1.1.0.apepack" → "1.1.0"
-     * or "update-2026-11-08.apepack" → null (date-based names have no version).
-     */
-    private String extractVersionFromApePackName(String name) {
-        // Remove .apepack extension
-        String base = name.toLowerCase().replaceAll("\\.apepack$", "");
-        // Try to find a version pattern (X.Y.Z or X.Y) at the end
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+[\\.\\-]\\d+(?:[\\.\\-]\\d+)*)$").matcher(base);
-        if (m.find()) {
-            return m.group(1).replace("-", ".");
-        }
         return null;
     }
 
@@ -468,209 +261,6 @@ public class PackUpdaterConfigScreen extends Screen {
         }
     }
 
-    // ==================== TAB: UPDATES ====================
-
-    private void buildUpdatesTab() {
-        int centerX = this.width / 2;
-        int panelWidth = 340;
-        int panelX = centerX - panelWidth / 2;
-        int startY = 55;
-
-        // Pack version display — checks for .apepack pack updates, NOT mod updates
-        addRenderableWidget(Button.builder(
-                Component.literal("Pack: " + ConfigManager.modpackVersion),
-                button -> {
-                    Thread checkThread = new Thread(() -> {
-                        UpdateCheckResult result = checkForPackUpdates(ConfigManager.repo, ConfigManager.channel);
-                        Minecraft.getInstance().execute(() -> {
-                            if (result.success && result.updateAvailable) {
-                                showToast("Pack update: v" + result.version + " (installed: " + ConfigManager.modpackVersion + ")");
-                                statusText = Component.literal("Pack update available: v" + result.version);
-                            } else if (result.success) {
-                                showToast("Pack up to date: " + ConfigManager.modpackVersion);
-                                statusText = Component.literal("Pack up to date: " + ConfigManager.modpackVersion);
-                            } else {
-                                showToast("Error: " + result.message);
-                                statusText = Component.literal(result.message);
-                            }
-                        });
-                    }, "PackUpdater-PackCheck");
-                    checkThread.setDaemon(true);
-                    checkThread.start();
-                }
-        ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
-
-        // Mod version display
-        addRenderableWidget(Button.builder(
-                Component.literal("Mod: v" + ConfigManager.CURRENT_VERSION),
-                button -> {}
-        ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
-
-        // Check for Update button
-        checkButton = addRenderableWidget(Button.builder(
-                Component.literal("Check for Update"),
-                button -> handleCheckForUpdate()
-        ).bounds(panelX + 20, startY + 70, panelWidth - 40, 20).build());
-    }
-
-    private void handleCheckForUpdate() {
-        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        if (dm.downloading) {
-            showToast("Download already in progress");
-            return;
-        }
-        blockUpdateButtons(true);
-        statusText = Component.literal("Checking for updates...");
-        if (checkButton != null) {
-            checkButton.setMessage(Component.literal("Checking..."));
-            checkButton.active = false;
-        }
-
-        Thread checkThread = new Thread(() -> {
-            dm.setChecking();
-            UpdateCheckResult result = checkForUpdates(ConfigManager.repo, ConfigManager.channel);
-            Minecraft.getInstance().execute(() -> {
-                if (result.success) {
-                    dm.latestVersion = result.version;
-                    dm.updateAvailable = result.updateAvailable;
-                    if (result.updateAvailable) {
-                        statusText = Component.literal("Update available: v" + result.version);
-                        showToast("Update available: v" + result.version);
-                        dm.setIdle();
-                        int bx = checkButton.getX(), by = checkButton.getY(), bw = checkButton.getWidth(), bh = checkButton.getHeight();
-                        removeWidget(checkButton);
-                        checkButton = null;
-                        downloadButton = addRenderableWidget(Button.builder(
-                                Component.literal("Download Update"),
-                                b -> handleDownloadUpdate()
-                        ).bounds(bx, by, bw, bh).build());
-                        blockUpdateButtons(false);
-                    } else {
-                        statusText = Component.literal("You're up to date!");
-                        showToast("You're up to date!");
-                        dm.setIdle();
-                        int bx = checkButton.getX(), by = checkButton.getY(), bw = checkButton.getWidth(), bh = checkButton.getHeight();
-                        removeWidget(checkButton);
-                        checkButton = addRenderableWidget(Button.builder(
-                                Component.literal("Check for Update"),
-                                b -> handleCheckForUpdate()
-                        ).bounds(bx, by, bw, bh).build());
-                        downloadButton = null;
-                        blockUpdateButtons(false);
-                    }
-                } else {
-                    statusText = Component.literal(result.message);
-                    showToast("Error: " + result.message);
-                    dm.setError(result.message);
-                    downloadButton = null;
-                    blockUpdateButtons(false);
-                }
-            });
-        }, "PackUpdater-Check");
-        checkThread.setDaemon(true);
-        checkThread.start();
-    }
-
-    private void handleDownloadUpdate() {
-        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        if (dm.downloading) {
-            showToast("Download already in progress");
-            return;
-        }
-        statusText = Component.literal("Downloading update...");
-        blockUpdateButtons(true);
-
-        Thread downloadThread = new Thread(() -> {
-            boolean success = PackUpdaterMod.downloadLatestApePack(ConfigManager.repo);
-            Minecraft.getInstance().execute(() -> {
-                if (success) {
-                    statusText = Component.literal("Update downloaded! Restart to install.");
-                    showToast("Update downloaded! Restart to install.");
-                    dm.setIdle();
-                    downloadButton = null;
-                    blockUpdateButtons(false);
-                } else {
-                    String errorMsg = dm.errorMessage != null ? dm.errorMessage : "Download failed";
-                    statusText = Component.literal("Download failed: " + errorMsg);
-                    showToast("Error: " + errorMsg);
-                    downloadButton = null;
-                    blockUpdateButtons(false);
-                }
-            });
-        }, "PackUpdater-Download");
-        downloadThread.setDaemon(true);
-        downloadThread.start();
-    }
-
-    private void blockUpdateButtons(boolean block) {
-        if (checkButton != null) checkButton.active = !block;
-        if (downloadButton != null) downloadButton.active = !block;
-    }
-
-    private void renderUpdatesTab(GuiGraphicsExtractor guiGraphics) {
-        int centerX = this.width / 2;
-        int panelWidth = 340;
-        int panelX = centerX - panelWidth / 2;
-        int startY = 140;
-
-        // Download progress panel
-        PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
-        boolean showProgress = dm.status != PackUpdaterMod.DownloadStatus.IDLE;
-        if (showProgress) {
-            int panelH = 70;
-            
-            String sText;
-            int statusColor;
-            switch (dm.status) {
-                case CHECKING -> { sText = "Checking..."; statusColor = 0x88CCFF; }
-                case DOWNLOADING -> { sText = "Downloading..."; statusColor = 0x88CCFF; }
-                case VERIFYING -> { sText = "Verifying..."; statusColor = 0xFFAA00; }
-                case DONE -> { sText = "Complete!"; statusColor = 0x55FF55; }
-                case ERROR -> { sText = "Failed!"; statusColor = 0xFF5555; }
-                default -> { sText = "Idle"; statusColor = 0x888888; }
-            }
-            guiGraphics.centeredText(font, sText, centerX, startY + 12, statusColor);
-
-            // Progress bar
-            int barX = panelX + 20, barY = startY + 28, barW = panelWidth - 40, barH = 10;
-            guiGraphics.fill(barX, barY, barX + barW, barY + barH, 0xFF333333);
-            guiGraphics.fill(barX, barY, barX + barW, barY, 0xFF666666);
-            guiGraphics.fill(barX, barY + barH - 1, barX + barW, barY + barH, 0xFF666666);
-            int fillW = (int) (barW * dm.progress);
-            if (fillW > 0) {
-                int fillColor = switch (dm.status) {
-                    case DONE -> 0xFF55FF55;
-                    case ERROR -> 0xFFFF5555;
-                    case VERIFYING -> 0xFFFFAA00;
-                    default -> 0xFF3399FF;
-                };
-                guiGraphics.fill(barX + 1, barY + 1, barX + fillW, barY + barH - 1, fillColor);
-            }
-            int pct = (int) (dm.progress * 100);
-            String pctStr = pct + "%";
-            if (dm.totalBytes > 0) {
-                double dMB = dm.downloadedBytes / (1024.0 * 1024.0);
-                double tMB = dm.totalBytes / (1024.0 * 1024.0);
-                pctStr = String.format("%d%% (%.1f/%.1f MB)", pct, dMB, tMB);
-            }
-            guiGraphics.centeredText(font, pctStr, centerX, barY + 1, 0xFFFFFF);
-
-            if (dm.status == PackUpdaterMod.DownloadStatus.ERROR && dm.errorMessage != null) {
-                String err = dm.errorMessage.length() > 80 ? dm.errorMessage.substring(0, 77) + "..." : dm.errorMessage;
-                guiGraphics.centeredText(font, err, centerX, startY + 55, 0xFF5555);
-            }
-        }
-
-        // Status message
-        if (statusText.getString() != null && !statusText.getString().isEmpty()) {
-            int color = 0xFFFF55;
-            String msg = statusText.getString();
-            if (msg.contains("Update") || msg.contains("downloaded") || msg.contains("up to date") || msg.contains("saved")) color = 0x55FF55;
-            else if (msg.contains("Error") || msg.contains("Invalid") || msg.contains("failed") || msg.contains("Rate limit")) color = 0xFF5555;
-            guiGraphics.centeredText(font, msg, centerX, startY - 15, color);
-        }
-    }
-
     // ==================== TAB: APEPACKS ====================
 
     private void buildApepacksTab() {
@@ -681,42 +271,76 @@ public class PackUpdaterConfigScreen extends Screen {
         int panelX = centerX - panelWidth / 2;
         int startY = 55;
 
-        // Open Apepacks folder button
-        addRenderableWidget(Button.builder(
-                Component.literal("Open Apepacks Folder"),
-                button -> openApepacksFolder()
-        ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
-
-        // Browse and install button
-        addRenderableWidget(Button.builder(
-                Component.literal("Browse .apepack"),
-                button -> {
-                    ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
-                        Path instanceRoot = Path.of(".");
-                        ApePackImportScreen importScreen = new ApePackImportScreen(this, selectedPath, instanceRoot);
-                        minecraft.setScreen(importScreen);
-                        importScreen.startImport();
-                    });
-                    minecraft.setScreen(filePicker);
-                }
-        ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
-
-        // Clear processed button
-        addRenderableWidget(Button.builder(
-                Component.literal("Clear Processed"),
-                button -> {
-                    try {
-                        Path processedPath = Path.of("config", "processed_apepacks.json");
-                        if (Files.exists(processedPath)) {
-                            Files.delete(processedPath);
-                            showToast("Cleared processed .apepack history");
-                            apepackFiles = scanApepacks();
-                        }
-                    } catch (Exception e) {
-                        showToast("Failed to clear: " + e.getMessage());
+        // Show install error if present
+        if (installError != null) {
+            addRenderableWidget(Button.builder(
+                    Component.literal("View Error Details"),
+                    button -> {
+                        statusText = Component.literal("Install failed: " + installError);
+                        showToast("See error details below");
                     }
-                }
-        ).bounds(panelX + 20, startY + 66, panelWidth - 40, 20).build());
+            ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
+
+            addRenderableWidget(Button.builder(
+                    Component.literal("Report Bug on GitHub"),
+                    button -> {
+                        try {
+                            java.awt.Desktop.getDesktop().browse(
+                                    java.net.URI.create("https://github.com/Apeiron-team/Apeiron-Pack-Updater/issues"));
+                            showToast("Opening GitHub issues page...");
+                        } catch (Exception e) {
+                            showToast("Could not open browser");
+                        }
+                    }
+            ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
+
+            addRenderableWidget(Button.builder(
+                    Component.literal("Dismiss Error"),
+                    button -> {
+                        installError = null;
+                        PackUpdaterMod.lastInstallError.set(null);
+                        switchTab(TabId.APEPACKS);
+                        showToast("Error dismissed");
+                    }
+            ).bounds(panelX + 20, startY + 66, panelWidth - 40, 20).build());
+        } else {
+            // Open Apepacks folder button
+            addRenderableWidget(Button.builder(
+                    Component.literal("Open Apepacks Folder"),
+                    button -> openApepacksFolder()
+            ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
+
+            // Browse and install button
+            addRenderableWidget(Button.builder(
+                    Component.literal("Browse .apepack"),
+                    button -> {
+                        ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
+                            Path instanceRoot = Path.of(".");
+                            ApePackImportScreen importScreen = new ApePackImportScreen(this, selectedPath, instanceRoot);
+                            minecraft.setScreen(importScreen);
+                            importScreen.startImport();
+                        });
+                        minecraft.setScreen(filePicker);
+                    }
+            ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
+
+            // Clear processed button
+            addRenderableWidget(Button.builder(
+                    Component.literal("Clear Processed"),
+                    button -> {
+                        try {
+                            Path processedPath = Path.of("config", "processed_apepacks.json");
+                            if (Files.exists(processedPath)) {
+                                Files.delete(processedPath);
+                                showToast("Cleared processed .apepack history");
+                                apepackFiles = scanApepacks();
+                            }
+                        } catch (Exception e) {
+                            showToast("Failed to clear: " + e.getMessage());
+                        }
+                    }
+            ).bounds(panelX + 20, startY + 66, panelWidth - 40, 20).build());
+        }
     }
 
     private List<ApePackFileInfo> scanApepacks() {
@@ -797,9 +421,19 @@ public class PackUpdaterConfigScreen extends Screen {
         int startY = 96;
         int panelHeight = this.height - startY - 30;
 
-        guiGraphics.centeredText(font, "Downloaded .apepack Files", centerX, startY + 10, 0x88CCFF);
+        // Show install error message
+        if (installError != null) {
+            guiGraphics.centeredText(font, "Installation Failed!", centerX, startY + 10, 0xFF5555);
+            guiGraphics.centeredText(font, "The .apepack update failed to install.", centerX, startY + 30, 0xCCCCCC);
+            guiGraphics.centeredText(font, "Please check latest.log and report the bug on GitHub.", centerX, startY + 48, 0xAAAAAA);
+            startY += 70;
+        }
 
-        if (apepackFiles.isEmpty()) {
+        if (installError == null) {
+            guiGraphics.centeredText(font, "Downloaded .apepack Files", centerX, startY + 10, 0x88CCFF);
+        }
+
+        if (apepackFiles.isEmpty() && installError == null) {
             guiGraphics.centeredText(font, "No .apepack files found", centerX, startY + 40, 0x666666);
             guiGraphics.centeredText(font, "Updates will be saved here", centerX, startY + 58, 0x444444);
             return;
@@ -837,7 +471,9 @@ public class PackUpdaterConfigScreen extends Screen {
         }
 
         // Instructions
-        guiGraphics.centeredText(font, "Click 'Browse .apepack' to install a file manually", centerX, this.height - 15, 0x555555);
+        if (installError == null) {
+            guiGraphics.centeredText(font, "Click 'Browse .apepack' to install a file manually", centerX, this.height - 15, 0x555555);
+        }
     }
 
     private String formatSize(long bytes) {
@@ -946,8 +582,20 @@ public class PackUpdaterConfigScreen extends Screen {
         int panelX = centerX - panelWidth / 2;
         int startY = 55;
 
+        // Pack version display
+        addRenderableWidget(Button.builder(
+                Component.literal("Pack: " + ConfigManager.modpackVersion),
+                button -> {}
+        ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
+
+        // Mod version display
+        addRenderableWidget(Button.builder(
+                Component.literal("Mod: v" + ConfigManager.CURRENT_VERSION),
+                button -> {}
+        ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
+
         // GitHub Repo field
-        repoField = new EditBox(font, panelX + 20, startY + 20, panelWidth - 40, 20, Component.literal("GitHub Repo"));
+        repoField = new EditBox(font, panelX + 20, startY + 70, panelWidth - 40, 20, Component.literal("GitHub Repo"));
         repoField.setMaxLength(Integer.MAX_VALUE);
         repoField.setHint(Component.literal("user/repo or https://github.com/user/repo"));
         repoField.setValue(ConfigManager.lastReleaseUrl != null ? ConfigManager.lastReleaseUrl : ConfigManager.repo);
@@ -958,7 +606,7 @@ public class PackUpdaterConfigScreen extends Screen {
         addRenderableWidget(repoField);
 
         // GitHub Token field
-        tokenField = new EditBox(font, panelX + 20, startY + 50, panelWidth - 40, 20, Component.literal("GitHub Token"));
+        tokenField = new EditBox(font, panelX + 20, startY + 100, panelWidth - 40, 20, Component.literal("GitHub Token"));
         tokenField.setMaxLength(Integer.MAX_VALUE);
         tokenField.setHint(Component.literal("Optional: increases API limit to 5,000/hr"));
         tokenField.setValue(ConfigManager.githubToken);
@@ -972,7 +620,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     cycleChannel();
                     button.setMessage(Component.literal("Channel: " + ConfigManager.channel.toUpperCase()));
                 }
-        ).bounds(panelX + 20, startY + 80, panelWidth - 40, 20).build());
+        ).bounds(panelX + 20, startY + 130, panelWidth - 40, 20).build());
 
         // Save button
         addRenderableWidget(Button.builder(
@@ -981,7 +629,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     ConfigManager.saveConfig();
                     showToast("Settings saved");
                 }
-        ).bounds(panelX + 20, startY + 110, panelWidth - 40, 20).build());
+        ).bounds(panelX + 20, startY + 160, panelWidth - 40, 20).build());
     }
 
     private void renderSettingsTab(GuiGraphicsExtractor guiGraphics) {
@@ -991,7 +639,7 @@ public class PackUpdaterConfigScreen extends Screen {
         guiGraphics.centeredText(font, "Configure update source and preferences", centerX, 50, 0x88CCFF);
 
         // Channel info
-        String availableInfo = String.format("Tiers → Stable: %s | Beta: %s | Nightly: %s",
+        String availableInfo = String.format("Tiers -> Stable: %s | Beta: %s | Nightly: %s",
                 hasStable, hasBeta, hasNightly);
         guiGraphics.centeredText(font, availableInfo, centerX, 150, 0x666666);
 
@@ -1048,18 +696,16 @@ public class PackUpdaterConfigScreen extends Screen {
         int tabWidth = 80;
         int tabHeight = 20;
         int gap = 4;
-        int totalWidth = 4 * tabWidth + 3 * gap;
+        int totalWidth = 3 * tabWidth + 2 * gap;
         int startX = (this.width - totalWidth) / 2;
         
         // Highlight active tab button background
-        int[] tabIndices = {0, 1, 2, 3};
         int activeIndex = activeTab.ordinal();
         int activeX = startX + activeIndex * (tabWidth + gap);
         guiGraphics.fill(activeX - 1, tabBarY - 1, activeX + tabWidth + 1, tabBarY + tabHeight + 1, 0x4466AA);
 
         // Render active tab content
         switch (activeTab) {
-            case UPDATES -> renderUpdatesTab(guiGraphics);
             case APEPACKS -> renderApepacksTab(guiGraphics, mouseX, mouseY);
             case GENERATE -> renderGenerateTab(guiGraphics);
             case SETTINGS -> renderSettingsTab(guiGraphics);
@@ -1091,17 +737,6 @@ public class PackUpdaterConfigScreen extends Screen {
         }
 
         super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
-    }
-
-    /**
-     * Draws a styled panel with border and background.
-     */
-    private void drawPanel(GuiGraphicsExtractor guiGraphics, int x, int y, int width, int height) {
-        guiGraphics.fill(x, y, x + width, y + height, 0xAA1A1A2E);
-        guiGraphics.fill(x, y, x + width, y + 1, 0x4466AA);
-        guiGraphics.fill(x, y, x + 1, y + height, 0x334488);
-        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0x334488);
-        guiGraphics.fill(x, y + height - 1, x + width, y + height, 0x222244);
     }
 
     @Override

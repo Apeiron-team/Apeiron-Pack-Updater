@@ -202,10 +202,6 @@ public class ApePackImportScreen extends Screen {
                                             System.err.println("[PackUpdater] Failed to remove .apepack file: " + e.getMessage());
                                         }
                                         System.out.println("[PackUpdater] .apepack installation complete! Restart recommended.");
-                                        // Show system toast notification for successful update
-                                        if (!packName.isEmpty() && !packVersion.isEmpty()) {
-                                            PackUpdaterMod.showUpdateSuccessToast(packName, packVersion);
-                                        }
                                     } else {
                                         System.err.println("[PackUpdater] .apepack installation failed: " + error);
                                     }
