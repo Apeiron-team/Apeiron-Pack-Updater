@@ -182,12 +182,10 @@ public class PackUpdaterMod {
         scanThread.setDaemon(true);
         scanThread.start();
 
-        // Check for GitHub updates in background
+        // Check for GitHub .apepack updates and compare with local apepacks/ folder
         Thread updateThread = new Thread(() -> {
             try {
-                if (isUpdateAvailable(ConfigManager.repo, ConfigManager.channel)) {
-                    prepareUpdate(ConfigManager.repo);
-                }
+                checkAndDownloadApePackUpdate(ConfigManager.repo, ConfigManager.channel);
             } catch (Exception e) {
                 System.err.println("[PackUpdater] Update check skipped: " + e.getMessage());
             }
@@ -197,93 +195,94 @@ public class PackUpdaterMod {
         updateThread.start();
     }
 
-    private boolean isUpdateAvailable(String repo, String targetChannel) throws Exception {
+    /**
+     * Checks GitHub for the latest .apepack release and compares it with the
+     * highest version found in the apepacks/ folder. Downloads only if the
+     * GitHub version is newer or no .apepack exists locally.
+     */
+    private void checkAndDownloadApePackUpdate(String repo, String channel) throws Exception {
+        // Find the highest .apepack version in the apepacks/ folder
+        Path apepacksDir = getApepacksDir();
+        String localVersion = null;
+        if (Files.exists(apepacksDir)) {
+            try (Stream<Path> paths = Files.list(apepacksDir)) {
+                for (Path apepack : paths.filter(p -> p.toString().toLowerCase().endsWith(".apepack")).toArray(Path[]::new)) {
+                    String ver = extractApePackVersion(apepack);
+                    if (ver != null) {
+                        if (localVersion == null || compareVersions(ver, localVersion) > 0) {
+                            localVersion = ver;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check the modpack version from config as a fallback
+        if (localVersion == null && ConfigManager.modpackVersion != null && !ConfigManager.modpackVersion.equals("v0.0")) {
+            localVersion = ConfigManager.modpackVersion.replace("v", "");
+        }
+
+        // Get the latest .apepack version from GitHub
+        String githubVersion = getLatestApePackVersion(repo, channel);
+        if (githubVersion == null) {
+            System.out.println("[PackUpdater] No .apepack release found on GitHub for " + repo);
+            return;
+        }
+
+        System.out.println("[PackUpdater] GitHub .apepack version: " + githubVersion);
+        System.out.println("[PackUpdater] Local .apepack version: " + (localVersion != null ? localVersion : "none"));
+
+        // Compare versions - only download if GitHub version is newer
+        if (localVersion != null && compareVersions(githubVersion, localVersion) <= 0) {
+            System.out.println("[PackUpdater] Local .apepack is up to date (v" + localVersion + " >= v" + githubVersion + ")");
+            return;
+        }
+
+        // Download the newer .apepack
+        System.out.println("[PackUpdater] Newer .apepack available (v" + githubVersion + " > v" + localVersion + "), downloading...");
+        boolean success = downloadLatestApePack(repo);
+        if (success) {
+            System.out.println("[PackUpdater] .apepack update downloaded successfully. Will install on next startup.");
+        } else {
+            System.err.println("[PackUpdater] Failed to download .apepack update.");
+        }
+    }
+
+    /**
+     * Extracts the pack version from an .apepack file by reading apepack.json inside the ZIP.
+     */
+    private static String extractApePackVersion(Path apepackFile) {
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(apepackFile.toFile());
+            java.util.zip.ZipEntry entry = zipFile.getEntry("apepack.json");
+            if (entry != null) {
+                try (InputStream is = zipFile.getInputStream(entry);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                    String content = reader.lines().reduce("", (a, b) -> a + b);
+                    JsonObject json = JsonParser.parseString(content).getAsJsonObject();
+                    if (json.has("packVersion")) {
+                        return json.get("packVersion").getAsString();
+                    }
+                }
+            }
+            zipFile.close();
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to read version from " + apepackFile.getFileName() + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Gets the latest .apepack version tag from GitHub releases.
+     */
+    private static String getLatestApePackVersion(String repo, String channel) throws Exception {
         String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
         URL url = URI.create(apiUrl).toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         ConfigManager.setupGitHubConnection(conn);
-        conn.setConnectTimeout(3000);
-
-        if (conn.getResponseCode() != 200) {
-            if (conn.getResponseCode() == 403) {
-                System.err.println("[PackUpdater] GitHub API rate limit exceeded. Add a GitHub token in the config to increase your limit.");
-            }
-            return false;
-        }
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        com.google.gson.JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
-        reader.close();
-
-        for (com.google.gson.JsonElement element : releases) {
-            JsonObject release = element.getAsJsonObject();
-            String tagName = release.get("tag_name").getAsString();
-            boolean isPrerelease = release.get("prerelease").getAsBoolean();
-
-            // Match release based on channel filter
-            boolean match = false;
-            if (targetChannel.equals("stable") && !isPrerelease) match = true;
-            if (targetChannel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
-            if (targetChannel.equals("nightly") && isPrerelease && tagName.toLowerCase().contains("nightly"))
-                match = true;
-
-            if (match) {
-                String cleanTag = tagName.replace("v", "");
-                return !cleanTag.equals(CURRENT_VERSION);
-            }
-        }
-        return false;
-    }
-
-    private void prepareUpdate(String repo) {
-        try {
-            // Save to apepacks/ folder in the game directory
-            Path apepacksDir = INSTANCE_ROOT.resolve("apepacks");
-            Files.createDirectories(apepacksDir);
-
-            // Look for .apepack asset in the latest release
-            String apepackUrl = findApePackUrl(repo);
-            if (apepackUrl != null) {
-                String timestamp = java.time.LocalDateTime.now().toString().replace(":", "-").replace(" ", "_");
-                Path targetApePack = apepacksDir.resolve("update_" + timestamp + ".apepack");
-                downloadFile(apepackUrl, targetApePack);
-                System.out.println("[PackUpdater] Downloaded .apepack update to " + targetApePack);
-                Files.writeString(INSTANCE_ROOT.resolve("update_success.json"), "{\"version\":\"apepack\"}");
-                System.exit(0);
-            }
-
-            // Fallback to zip download
-            Path stagingDir = INSTANCE_ROOT.resolve("update_staging");
-            Files.createDirectories(stagingDir);
-
-            String downloadUrl = "https://github.com/" + repo + "/releases/latest/download/pack-update.zip";
-            Path targetZip = stagingDir.resolve("update.zip");
-
-            ReadableByteChannel channel = Channels.newChannel(URI.create(downloadUrl).toURL().openStream());
-            try (FileOutputStream fos = new FileOutputStream(targetZip.toFile())) {
-                fos.getChannel().transferFrom(channel, 0, Long.MAX_VALUE);
-            }
-
-            generateUpdaterScript();
-            Files.writeString(INSTANCE_ROOT.resolve("update_success.json"), "{\"version\":\"latest\"}");
-            System.exit(0);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Finds the .apepack download URL from the latest GitHub release.
-     */
-    private String findApePackUrl(String repo) throws Exception {
-        String apiUrl = "https://api.github.com/repos/" + repo + "/releases/latest";
-        URL url = URI.create(apiUrl).toURL();
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        ConfigManager.setupGitHubConnection(conn);
         conn.setConnectTimeout(5000);
+        conn.setReadTimeout(10000);
 
         if (conn.getResponseCode() != 200) {
             if (conn.getResponseCode() == 403) {
@@ -293,16 +292,30 @@ public class PackUpdaterMod {
         }
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        JsonObject release = JsonParser.parseReader(reader).getAsJsonObject();
+        com.google.gson.JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
         reader.close();
 
-        if (release.has("assets") && release.get("assets").isJsonArray()) {
-            com.google.gson.JsonArray assets = release.get("assets").getAsJsonArray();
-            for (com.google.gson.JsonElement elem : assets) {
-                JsonObject asset = elem.getAsJsonObject();
-                String name = asset.get("name").getAsString();
-                if (name.toLowerCase().endsWith(".apepack")) {
-                    return asset.get("browser_download_url").getAsString();
+        for (com.google.gson.JsonElement element : releases) {
+            JsonObject release = element.getAsJsonObject();
+            String tagName = release.get("tag_name").getAsString();
+            boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
+
+            boolean match = false;
+            if (channel.equals("stable") && !isPrerelease) match = true;
+            else if (channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
+            else if (channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
+
+            if (match) {
+                // Check if this release has an .apepack asset
+                if (release.has("assets") && release.get("assets").isJsonArray()) {
+                    com.google.gson.JsonArray assets = release.get("assets").getAsJsonArray();
+                    for (com.google.gson.JsonElement assetElem : assets) {
+                        JsonObject asset = assetElem.getAsJsonObject();
+                        String name = asset.get("name").getAsString();
+                        if (name.toLowerCase().endsWith(".apepack")) {
+                            return tagName.replace("v", "").replace("V", "");
+                        }
+                    }
                 }
             }
         }
@@ -310,21 +323,33 @@ public class PackUpdaterMod {
     }
 
     /**
-     * Downloads a file from a URL to the target path.
+     * Compares two version strings. Returns positive if v1 > v2, negative if v1 < v2, 0 if equal.
      */
-    private void downloadFile(String downloadUrl, Path targetPath) throws Exception {
-        URL url = URI.create(downloadUrl).toURL();
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        ConfigManager.setupGitHubConnection(conn);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(60000);
+    private static int compareVersions(String v1, String v2) {
+        if (v1 == null || v1.isEmpty()) return -1;
+        if (v2 == null || v2.isEmpty()) return 1;
+        if (v1.equals(v2)) return 0;
 
-        ReadableByteChannel channel = Channels.newChannel(conn.getInputStream());
-        try (FileOutputStream fos = new FileOutputStream(targetPath.toFile())) {
-            fos.getChannel().transferFrom(channel, 0, Long.MAX_VALUE);
+        String[] parts1 = v1.split("[.+\\-_]");
+        String[] parts2 = v2.split("[.+\\-_]");
+
+        int maxLen = Math.max(parts1.length, parts2.length);
+        for (int i = 0; i < maxLen; i++) {
+            String p1 = i < parts1.length ? parts1[i] : "0";
+            String p2 = i < parts2.length ? parts2[i] : "0";
+
+            try {
+                long num1 = Long.parseLong(p1);
+                long num2 = Long.parseLong(p2);
+                if (num1 != num2) return Long.compare(num1, num2);
+            } catch (NumberFormatException e) {
+                int cmp = p1.compareTo(p2);
+                if (cmp != 0) return cmp;
+            }
         }
+        return 0;
     }
+
 
     public static PackUpdaterMod getInstance() {
         return instance;

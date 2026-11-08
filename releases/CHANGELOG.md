@@ -2,6 +2,20 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.23] - 2026-11-07
+
+### Added
+- **Launch-time .apepack version check** — On game startup, the mod now checks the GitHub repo for the latest .apepack release and compares it with the highest version found in the `apepacks/` folder. It reads the `apepack.json` inside each local .apepack to extract the pack version, then only downloads if the GitHub version is newer or no .apepack exists locally
+- **`extractApePackVersion()` method** — Opens an .apepack ZIP file and reads the `packVersion` field from `apepack.json` without extracting the entire archive
+- **`getLatestApePackVersion()` method** — Queries GitHub releases API, filters by channel (stable/beta/nightly), and returns the version tag of the first release that contains an .apepack asset
+- **`compareVersions()` method** — Semantic version comparison that splits by `.`, `+`, `-`, `_` and compares segments numerically when possible
+- **Modpack version fallback** — If no .apepack files exist in the apepacks/ folder, the mod falls back to comparing against the `modpackVersion` stored in the config (updated when an .apepack is installed)
+
+### Changed
+- Replaced `isUpdateAvailable()` + `prepareUpdate()` with `checkAndDownloadApePackUpdate()` — the new method handles the entire flow: scan local versions, fetch GitHub version, compare, and download only if needed
+- Removed unused `isUpdateAvailable()`, `prepareUpdate()`, `findApePackUrl()`, and `downloadFile()` methods to clean up the codebase
+- Startup update check now logs detailed version comparison info to the console for debugging
+
 ## [0.0.22] - 2026-11-07
 
 ### Fixed
