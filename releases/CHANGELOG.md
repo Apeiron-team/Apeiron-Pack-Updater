@@ -4,6 +4,32 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.0.1] - Patch - 2026-11-08
+
+### Fixed
+- **Missing manual update check** — Added "Check for Update" button in Apepacks tab to manually check for and download .apepack updates from GitHub
+- **Options menu button missing** — Fixed PackUpdater button in Minecraft Options menu (Esc → Options) using event.addListener
+- **Open Apepacks folder path** — Fixed path concatenation bug (instance\.\apepacks → correct path)
+- **File picker default directory** — Browser now defaults to instance apepacks folder instead of user Downloads
+- **File picker button alignment** — Centered all navigation buttons, fixed Desktop button path detection
+- **File extensions not shown** — File picker now displays file extensions for all files
+- **Folder icon** — Replaced "[DIR]" text with Unicode folder icon (📁)
+- **Instance Folder button** — Added "Instance" button in file picker to navigate back to modpack instance root
+- **Mod version display** — Fixed mod version in mods menu to show "v1.0R" instead of "v0.0.12alpha"
+- **File picker background** — Fixed broken background rendering in file picker
+- **Missing Done button** — Added "Done" button at bottom of config screen
+- **Default pack version** — Shows "No modpack installed (v0.0)" instead of "Pack: v1.0" when no modpack is installed
+- **Modpack name display** — Config screen now displays modpack name alongside version
+- **Startup update check** — Added download progress bar in config screen for manual update downloads
+- **Channel button visibility** — Channel button only shows when multiple release channels are available
+
+### Added
+- **Modpack name tracking** — Config now stores and displays the modpack name from .apepack files
+- **Download progress bar** — Visual progress bar with byte-level progress during .apepack downloads
+- **Pack version display** — Apepacks tab shows pack name and version at the top
+
+---
+
 ## [1.0.0] - RELEASE - 2026-11-08
 
 ### Changed

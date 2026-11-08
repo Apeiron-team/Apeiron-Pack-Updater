@@ -139,6 +139,8 @@ public class PackUpdaterMod {
                                         @Override
                                         public void onPackInfo(String name, String version) {
                                             System.out.println("[PackUpdater] Pack info: " + name + " v" + version);
+                                            // Save modpack name
+                                            ConfigManager.updateModpackName(name);
                                         }
 
                                         @Override

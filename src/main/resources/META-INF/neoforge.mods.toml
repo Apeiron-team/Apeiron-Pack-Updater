@@ -6,9 +6,9 @@ issueTrackerURL = "https://github.com/SimonArminovski/YourModpackRepo/issues"
 [[mods]]
 modId = "packupdater"
 version = "${projectVersion}"
-displayName = "Apeiron Pack Updater"
-displayURL = "https://github.com/SimonArminovski/YourModpackRepo"
-description = "A custom pack updater made by apeiron team for their modpacks to have a self updater from github cause they thought updating from curseforge sucks ass"
+displayName = "Apeiron Pack Updater v1.0R"
+displayURL = "https://github.com/Apeiron-team/Apeiron-Pack-Updater"
+description = "A custom pack updater made by Apeiron team for their modpacks. Downloads and installs .apepack updates from GitHub releases."
 authors = "Apeiron Team"
 
 [[dependencies.packupdater]]

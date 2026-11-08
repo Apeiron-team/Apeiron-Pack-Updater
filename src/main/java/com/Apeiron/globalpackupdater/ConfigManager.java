@@ -14,10 +14,11 @@ public class ConfigManager {
     public static String channel = "stable"; // stable, beta, nightly
     public static String lastReleaseUrl = null;
     public static String modpackVersion = "v0.0"; // Default modpack version
+    public static String modpackName = ""; // Modpack name (set from .apepack)
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.0.0";
+    public static final String CURRENT_VERSION = "1.0.1";
 
     public static void loadConfig() {
         try {
@@ -28,6 +29,7 @@ public class ConfigManager {
                 if (json.has("channel")) channel = json.get("channel").getAsString();
                 if (json.has("lastReleaseUrl")) lastReleaseUrl = json.get("lastReleaseUrl").getAsString();
                 if (json.has("modpackVersion")) modpackVersion = json.get("modpackVersion").getAsString();
+                if (json.has("modpackName")) modpackName = json.get("modpackName").getAsString();
                 if (json.has("githubToken")) githubToken = json.get("githubToken").getAsString();
             } else {
                 saveConfig();
@@ -47,6 +49,9 @@ public class ConfigManager {
                 json.addProperty("lastReleaseUrl", lastReleaseUrl);
             }
             json.addProperty("modpackVersion", modpackVersion);
+            if (!modpackName.isEmpty()) {
+                json.addProperty("modpackName", modpackName);
+            }
             if (!githubToken.isEmpty()) {
                 json.addProperty("githubToken", githubToken);
             }
@@ -68,6 +73,17 @@ public class ConfigManager {
             modpackVersion = cleanVersion;
             saveConfig();
             System.out.println("[PackUpdater] Updated modpack version to " + modpackVersion);
+        }
+    }
+
+    /**
+     * Updates the modpack name from an installed .apepack file.
+     */
+    public static void updateModpackName(String name) {
+        if (name != null && !name.isEmpty()) {
+            modpackName = name;
+            saveConfig();
+            System.out.println("[PackUpdater] Updated modpack name to " + modpackName);
         }
     }
 

@@ -63,12 +63,18 @@ public class ApePackFilePicker extends Screen {
         super(Component.literal("Select .apepack File"));
         this.parent = parent;
         this.callback = callback;
-        // Default to the modpack's apepacks directory
+        // Bug 4: Default to the modpack's apepacks directory
         Path apepacksDir = PackUpdaterMod.getApepacksDir();
-        if (apepacksDir != null && Files.exists(apepacksDir)) {
-            this.currentDir = apepacksDir.toFile();
+        if (apepacksDir != null && Files.exists(apepacksDir.toAbsolutePath())) {
+            this.currentDir = apepacksDir.toAbsolutePath().toFile();
         } else {
-            this.currentDir = new File(System.getProperty("user.home"));
+            // Create it if it doesn't exist
+            try {
+                Files.createDirectories(apepacksDir);
+                this.currentDir = apepacksDir.toAbsolutePath().toFile();
+            } catch (Exception e) {
+                this.currentDir = new File(System.getProperty("user.home"));
+            }
         }
     }
 
@@ -116,8 +122,12 @@ public class ApePackFilePicker extends Screen {
         });
         this.addRenderableWidget(this.searchField);
 
-        // Navigation buttons row (y=76, below search field)
+        // Bug 5+8: Navigation buttons row - centered with Instance Folder button
         int navY = 76;
+        int navBtnWidth = 70;
+        int navGap = 4;
+        int totalNavWidth = 6 * navBtnWidth + 5 * navGap; // Back, Up, Instance, Home, Downloads, Desktop
+        int navStartX = centerX - totalNavWidth / 2;
 
         // Back button
         this.addRenderableWidget(Button.builder(
@@ -129,7 +139,7 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 200, navY, 50, 20).build());
+        ).bounds(navStartX, navY, navBtnWidth, 20).build());
 
         // Up button (go to parent)
         this.addRenderableWidget(Button.builder(
@@ -141,7 +151,20 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 145, navY, 50, 20).build());
+        ).bounds(navStartX + navBtnWidth + navGap, navY, navBtnWidth, 20).build());
+
+        // Bug 8: Instance Folder button - goes back to modpack instance root
+        this.addRenderableWidget(Button.builder(
+                Component.literal("Instance"),
+                button -> {
+                    Path instanceRoot = PackUpdaterMod.getApepacksDir().getParent() != null 
+                            ? PackUpdaterMod.getApepacksDir().getParent() 
+                            : Path.of(".");
+                    this.currentDir = instanceRoot.toFile();
+                    this.scrollOffset = 0;
+                    refreshFiles();
+                }
+        ).bounds(navStartX + 2 * (navBtnWidth + navGap), navY, navBtnWidth, 20).build());
 
         // Quick access: Home folder
         this.addRenderableWidget(Button.builder(
@@ -151,7 +174,7 @@ public class ApePackFilePicker extends Screen {
                     this.scrollOffset = 0;
                     refreshFiles();
                 }
-        ).bounds(centerX - 90, navY, 60, 20).build());
+        ).bounds(navStartX + 3 * (navBtnWidth + navGap), navY, navBtnWidth, 20).build());
 
         // Quick access: Downloads folder
         this.addRenderableWidget(Button.builder(
@@ -164,30 +187,28 @@ public class ApePackFilePicker extends Screen {
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX - 25, navY, 80, 20).build());
+        ).bounds(navStartX + 4 * (navBtnWidth + navGap), navY, navBtnWidth, 20).build());
 
-        // Quick access: Desktop - try multiple paths
+        // Bug 5: Quick access: Desktop - fixed path detection
         this.addRenderableWidget(Button.builder(
                 Component.literal("Desktop"),
                 button -> {
-                    // Try multiple Desktop paths
-                    File desktop = new File(System.getProperty("user.home"), "Desktop");
-                    if (!desktop.exists()) {
-                        String userProfile = System.getenv("USERPROFILE");
-                        if (userProfile != null) {
-                            desktop = new File(userProfile, "Desktop");
-                        }
+                    // Try USERPROFILE first (most reliable on Windows)
+                    String userProfile = System.getenv("USERPROFILE");
+                    File desktop = null;
+                    if (userProfile != null) {
+                        desktop = new File(userProfile, "Desktop");
                     }
-                    if (!desktop.exists()) {
-                        desktop = new File(new File(System.getProperty("user.dir"), ".."), "Desktop");
+                    if (desktop == null || !desktop.exists()) {
+                        desktop = new File(System.getProperty("user.home"), "Desktop");
                     }
-                    if (desktop.exists()) {
+                    if (desktop != null && desktop.exists()) {
                         this.currentDir = desktop;
                         this.scrollOffset = 0;
                         refreshFiles();
                     }
                 }
-        ).bounds(centerX + 60, navY, 80, 20).build());
+        ).bounds(navStartX + 5 * (navBtnWidth + navGap), navY, navBtnWidth, 20).build());
 
         // Select button
         this.addRenderableWidget(Button.builder(
@@ -297,11 +318,13 @@ public class ApePackFilePicker extends Screen {
             if (y < this.panelTop) y = this.panelTop;
             if (y > this.panelTop + this.panelHeight - ROW_HEIGHT) y = this.panelTop + this.panelHeight - ROW_HEIGHT;
 
+            // Bug 7: Use folder icon instead of [DIR]
+            // Bug 6: Show file extension for all files
             String displayName;
             if (info.isDirectory) {
-                displayName = "[DIR] " + info.file.getName();
+                displayName = "\uF07C " + info.file.getName(); // Unicode folder icon
             } else {
-                displayName = info.file.getName();
+                displayName = info.file.getName(); // Already includes extension
             }
 
             final FileInfo finalInfo = info;
@@ -389,11 +412,11 @@ public class ApePackFilePicker extends Screen {
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Background
-        guiGraphics.fill(0, 0, this.width, this.height, 0xF0000000);
+        // Bug 10: Fixed background rendering - use semi-transparent dark background
+        guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
 
         // Title
-        guiGraphics.centeredText(this.font, "Select .apepack File", this.width / 2, 8, 0xFFFFFF);
+        guiGraphics.centeredText(this.font, "Select .apepack File", this.width / 2, 8, 0x88CCFF);
 
         // Current directory label
         guiGraphics.centeredText(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
