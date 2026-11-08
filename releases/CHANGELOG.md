@@ -2,6 +2,24 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.24] - 2026-11-08
+
+### Fixed
+- **Startup install cancels itself** — The download thread and scan thread now run in sequence instead of in parallel. The download thread completes first (using a `CountDownLatch`), then the scan thread processes any newly downloaded .apepack files. Previously both threads ran simultaneously, so the scan finished before the download saved the file, causing the update to be ignored
+- **.apepack extraction from apepacks/ folder not working** — The scan thread now properly searches both `mods/` and `apepacks/` directories after the download completes, sorting apepacks/ files by modification time (oldest first) to ensure the most recent download is processed. The import progress screen is shown on the main thread for each unprocessed .apepack
+- **No main menu notification during update** — Added `MainMenuNotification` screen that shows on the title screen during download and installation. Displays download progress with a progress bar, installation progress with file counts, and a completion summary with restart prompt. Auto-dismisses after completion
+
+### Added
+- **`MainMenuNotification.java`** — New screen overlay for main menu notifications during update download and installation. Shows emoji icons (📥 downloading, 📦 installing, ✅ complete, ❌ error), color-coded progress bars, and auto-dismiss timers for completion/error states
+- **`CountDownLatch` synchronization** — Download and scan threads are now synchronized so the scan always waits for the download to complete before running, preventing race conditions
+- **Download progress reporting** — The download notification updates in real-time as the .apepack is downloaded from GitHub, showing percentage complete
+
+### Changed
+- Startup flow completely restructured: download thread runs first with a 120-second timeout, then scan thread processes all .apepack files
+- `checkAndDownloadApePackUpdate()` now returns a boolean to indicate whether a download occurred
+- Scan thread waits up to 120 seconds for the download to complete before proceeding
+- Download notification is automatically closed when transitioning to the import screen or when no .apepack files need processing
+
 ## [0.0.23] - 2026-11-07
 
 ### Added

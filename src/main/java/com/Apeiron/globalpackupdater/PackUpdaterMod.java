@@ -3,6 +3,7 @@ package com.Apeiron.globalpackupdater;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -16,7 +17,9 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.*;
+import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Stream;
 
 @Mod("packupdater")
@@ -116,91 +119,148 @@ public class PackUpdaterMod {
     private void onClientSetup(FMLClientSetupEvent event) {
         performCleanup();
 
-        // Scan for .apepack files in the mods and apepacks directories on startup
-        Thread scanThread = new Thread(() -> {
-            try {
-                Path modsDir = INSTANCE_ROOT.resolve("mods");
-                if (Files.exists(modsDir)) {
-                    // Check if there are any .apepack files to install
-                    boolean hasApepacks = false;
-                    try (Stream<Path> paths = Files.list(modsDir)) {
-                        if (paths.anyMatch(p -> p.toString().toLowerCase().endsWith(".apepack"))) {
-                            hasApepacks = true;
-                        }
-                    }
-                    Path apepacksDir = getApepacksDir();
-                    if (Files.exists(apepacksDir)) {
-                        try (Stream<Path> paths = Files.list(apepacksDir)) {
-                            if (paths.anyMatch(p -> p.toString().toLowerCase().endsWith(".apepack"))) {
-                                hasApepacks = true;
-                            }
-                        }
-                    }
+        // Latch to synchronize: download must complete before scan runs
+        final CountDownLatch downloadLatch = new CountDownLatch(1);
+        final boolean[] downloadSucceeded = {false};
+        final MainMenuNotification[] notification = {null};
 
-                    if (hasApepacks) {
-                        // Show the import progress screen on the main thread
+        // Step 1: Check for GitHub .apepack updates FIRST (before scanning local files)
+        Thread updateThread = new Thread(() -> {
+            try {
+                // Show notification on the main menu before starting download
+                Minecraft.getInstance().execute(() -> {
+                    notification[0] = new MainMenuNotification(
+                            Minecraft.getInstance().screen != null ? Minecraft.getInstance().screen : new net.minecraft.client.gui.screens.TitleScreen());
+                    notification[0].setDownloading(ConfigManager.repo, 0.0);
+                    // Only show if we're on the title screen or no screen is open
+                    if (Minecraft.getInstance().screen == null || Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.TitleScreen) {
+                        Minecraft.getInstance().setScreen(notification[0]);
+                    }
+                });
+
+                // Override downloadManager callbacks to update the notification
+                Runnable progressUpdater = () -> {
+                    if (notification[0] != null) {
+                        double p = downloadManager.progress;
                         Minecraft.getInstance().execute(() -> {
-                            // Find the first unprocessed .apepack file to show in the progress screen
-                            Path apepackFile = null;
-                            try (Stream<Path> paths = Files.list(modsDir)) {
-                                apepackFile = paths
-                                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
-                                        .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
-                                        .findFirst()
-                                        .orElse(null);
-                            } catch (IOException ignored) {}
-                            if (apepackFile == null && Files.exists(apepacksDir)) {
-                                try (Stream<Path> paths = Files.list(apepacksDir)) {
-                                    apepackFile = paths
-                                            .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
-                                            .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
-                                            .findFirst()
-                                            .orElse(null);
-                                } catch (IOException ignored) {}
-                            }
-                            if (apepackFile != null) {
-                                ApePackImportScreen importScreen = new ApePackImportScreen(
-                                        new net.minecraft.client.gui.screens.TitleScreen(),
-                                        apepackFile, INSTANCE_ROOT);
-                                Minecraft.getInstance().setScreen(importScreen);
-                                // Start the import in the background
-                                importScreen.startImport();
-                            } else {
-                                // All .apepack files are already processed, just notify
-                                System.out.println("[PackUpdater] All .apepack files have already been processed.");
+                            if (notification[0] != null && notification[0].type == MainMenuNotification.NotificationType.DOWNLOADING) {
+                                notification[0].setDownloading(ConfigManager.repo, p);
                             }
                         });
-                    } else {
-                        // No .apepack files, just run the silent scan
-                        ApePackLoader.scanAndInstall(modsDir);
+                    }
+                };
+
+                boolean downloaded = checkAndDownloadApePackUpdate(ConfigManager.repo, ConfigManager.channel);
+                downloadSucceeded[0] = downloaded;
+                if (downloaded) {
+                    System.out.println("[PackUpdater] Download complete, triggering post-download scan...");
+                }
+            } catch (Exception e) {
+                System.err.println("[PackUpdater] Update check failed: " + e.getMessage());
+                if (notification[0] != null) {
+                    Minecraft.getInstance().execute(() -> {
+                        notification[0].setError(e.getMessage());
+                    });
+                }
+            } finally {
+                // Signal that download phase is complete (success or failure)
+                downloadLatch.countDown();
+            }
+        }, "PackUpdater-Download");
+        updateThread.setDaemon(true);
+        updateThread.start();
+
+        // Step 2: Wait for download to finish, THEN scan for .apepack files
+        Thread scanThread = new Thread(() -> {
+            try {
+                // Wait up to 120 seconds for the download to complete (large .apepack files)
+                boolean waited = downloadLatch.await(120, java.util.concurrent.TimeUnit.SECONDS);
+                if (!waited) {
+                    System.err.println("[PackUpdater] Download timed out, proceeding with scan anyway...");
+                }
+                System.out.println("[PackUpdater] Download phase complete, starting .apepack scan...");
+
+                // Now scan for .apepack files (including any just downloaded)
+                Path modsDir = INSTANCE_ROOT.resolve("mods");
+                Path apepacksDir = getApepacksDir();
+
+                // Check if there are any unprocessed .apepack files
+                Path apepackFile = null;
+                if (Files.exists(modsDir)) {
+                    try (Stream<Path> paths = Files.list(modsDir)) {
+                        apepackFile = paths
+                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
+                                .findFirst()
+                                .orElse(null);
                     }
                 }
+                if (apepackFile == null && Files.exists(apepacksDir)) {
+                    try (Stream<Path> paths = Files.list(apepacksDir)) {
+                        List<Path> apepacks = paths
+                                .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                                .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
+                                .sorted(Comparator.comparingLong(p -> {
+                                    try { return Files.getLastModifiedTime(p).toMillis(); }
+                                    catch (IOException e) { return 0L; }
+                                }))
+                                .toList();
+                        if (!apepacks.isEmpty()) {
+                            apepackFile = apepacks.get(0);
+                        }
+                    }
+                }
+
+                if (apepackFile != null) {
+                    System.out.println("[PackUpdater] Found unprocessed .apepack: " + apepackFile.getFileName());
+                    // Show the import progress screen on the main thread
+                    final Path finalApepackFile = apepackFile;
+                    Minecraft.getInstance().execute(() -> {
+                        // Close the download notification if it's still open
+                        if (notification[0] != null && Minecraft.getInstance().screen == notification[0]) {
+                            Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
+                        }
+                        ApePackImportScreen importScreen = new ApePackImportScreen(
+                                new net.minecraft.client.gui.screens.TitleScreen(),
+                                finalApepackFile, INSTANCE_ROOT);
+                        Minecraft.getInstance().setScreen(importScreen);
+                        importScreen.startImport();
+                    });
+                } else {
+                    // No unprocessed .apepack files — run silent scan for any remaining
+                    if (Files.exists(modsDir)) {
+                        ApePackLoader.scanAndInstall(modsDir);
+                    }
+                    System.out.println("[PackUpdater] No unprocessed .apepack files found.");
+                    
+                    // Close the download notification if it's still open
+                    if (notification[0] != null) {
+                        Minecraft.getInstance().execute(() -> {
+                            if (Minecraft.getInstance().screen == notification[0]) {
+                                Screen parent = notification[0].getParent();
+                                Minecraft.getInstance().setScreen(parent != null ? parent : new net.minecraft.client.gui.screens.TitleScreen());
+                            }
+                        });
+                    }
+                }
+
+            } catch (InterruptedException e) {
+                System.err.println("[PackUpdater] Scan thread interrupted: " + e.getMessage());
             } catch (Exception e) {
                 System.err.println("[PackUpdater] ApePack scan failed: " + e.getMessage());
             }
         }, "PackUpdater-ApePackScan");
         scanThread.setDaemon(true);
         scanThread.start();
-
-        // Check for GitHub .apepack updates and compare with local apepacks/ folder
-        Thread updateThread = new Thread(() -> {
-            try {
-                checkAndDownloadApePackUpdate(ConfigManager.repo, ConfigManager.channel);
-            } catch (Exception e) {
-                System.err.println("[PackUpdater] Update check skipped: " + e.getMessage());
-            }
-        }, "PackUpdater-Thread");
-
-        updateThread.setDaemon(true);
-        updateThread.start();
     }
 
     /**
      * Checks GitHub for the latest .apepack release and compares it with the
      * highest version found in the apepacks/ folder. Downloads only if the
      * GitHub version is newer or no .apepack exists locally.
+     * @return true if a new .apepack was downloaded, false otherwise
      */
-    private void checkAndDownloadApePackUpdate(String repo, String channel) throws Exception {
+    private boolean checkAndDownloadApePackUpdate(String repo, String channel) throws Exception {
         // Find the highest .apepack version in the apepacks/ folder
         Path apepacksDir = getApepacksDir();
         String localVersion = null;
@@ -226,7 +286,7 @@ public class PackUpdaterMod {
         String githubVersion = getLatestApePackVersion(repo, channel);
         if (githubVersion == null) {
             System.out.println("[PackUpdater] No .apepack release found on GitHub for " + repo);
-            return;
+            return false;
         }
 
         System.out.println("[PackUpdater] GitHub .apepack version: " + githubVersion);
@@ -235,7 +295,7 @@ public class PackUpdaterMod {
         // Compare versions - only download if GitHub version is newer
         if (localVersion != null && compareVersions(githubVersion, localVersion) <= 0) {
             System.out.println("[PackUpdater] Local .apepack is up to date (v" + localVersion + " >= v" + githubVersion + ")");
-            return;
+            return false;
         }
 
         // Download the newer .apepack
@@ -243,8 +303,10 @@ public class PackUpdaterMod {
         boolean success = downloadLatestApePack(repo);
         if (success) {
             System.out.println("[PackUpdater] .apepack update downloaded successfully. Will install on next startup.");
+            return true;
         } else {
             System.err.println("[PackUpdater] Failed to download .apepack update.");
+            return false;
         }
     }
 
