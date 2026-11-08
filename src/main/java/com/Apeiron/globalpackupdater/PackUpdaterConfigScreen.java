@@ -83,6 +83,27 @@ public class PackUpdaterConfigScreen extends Screen {
     private double downloadProgress = 0.0;
     private String downloadStatus = "";
     private boolean downloading = false;
+    private boolean downloadPaused = false;
+    private long downloadStartTime = 0;
+    private long downloadStartBytes = 0;
+    private long downloadTotalBytes = 0;
+    private String downloadSpeed = "";
+    
+    // Changelog display
+    private String changelogText = "";
+    private int changelogScrollOffset = 0;
+    
+    // Statistics
+    private String statsText = "";
+    
+    // Download connection for pause/resume
+    private java.net.HttpURLConnection activeDownloadConn = null;
+    private java.io.RandomAccessFile activeDownloadFile = null;
+    private Path activeDownloadTarget = null;
+    private String activeDownloadName = "";
+    
+    // Apepack file for diff screen
+    private Path pendingApepackFile = null;
 
     public PackUpdaterConfigScreen(Screen parent) {
         super(Component.literal("Apeiron Pack Updater"));
@@ -380,7 +401,7 @@ public class PackUpdaterConfigScreen extends Screen {
                         for (JsonElement assetElem : assets) {
                             JsonObject asset = assetElem.getAsJsonObject();
                             String name = asset.get("name").getAsString();
-                            if (name.toLowerCase().endsWith(".apepack")) {
+                            if (name.toLowerCase().endsWith(".apepack2") || name.toLowerCase().endsWith(".apepack")) {
                                 String apePackVer = extractVersionFromApePackName(name);
                                 if (apePackVer != null) {
                                     if (latestApePackVersion == null || compareVersions(apePackVer, latestApePackVersion) > 0) {
@@ -408,7 +429,7 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     private String extractVersionFromApePackName(String name) {
-        String base = name.toLowerCase().replaceAll("\\.apepack$", "");
+        String base = name.toLowerCase().replaceAll("\\.apepack2$", "").replaceAll("\\.apepack$", "");
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+[\\.\\-]\\d+(?:[\\.\\-]\\d+)*)$").matcher(base);
         if (m.find()) return m.group(1).replace("-", ".");
         return null;
@@ -439,7 +460,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     for (JsonElement assetElem : assets) {
                         JsonObject asset = assetElem.getAsJsonObject();
                         String name = asset.get("name").getAsString();
-                        if (name.toLowerCase().endsWith(".apepack")) {
+                        if (name.toLowerCase().endsWith(".apepack2") || name.toLowerCase().endsWith(".apepack")) {
                             String downloadUrl = asset.get("browser_download_url").getAsString();
                             Path apepacksDir = PackUpdaterMod.getApepacksDir();
                             Files.createDirectories(apepacksDir);
@@ -570,30 +591,13 @@ public class PackUpdaterConfigScreen extends Screen {
                     button -> {
                         ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
                             Path instanceRoot = Path.of(".");
-                            ApePackImportScreen importScreen = new ApePackImportScreen(this, selectedPath, instanceRoot);
-                            minecraft.setScreen(importScreen);
-                            importScreen.startImport();
+                            // Show diff screen before installing
+                            ApePackDiffScreen diffScreen = new ApePackDiffScreen(this, selectedPath, instanceRoot);
+                            minecraft.setScreen(diffScreen);
                         });
                         minecraft.setScreen(filePicker);
                     }
             ).bounds(panelX + 20, startY + 94, panelWidth - 40, 20).build());
-
-            // Clear processed button
-            addRenderableWidget(Button.builder(
-                    Component.literal("Clear Processed"),
-                    button -> {
-                        try {
-                            Path processedPath = Path.of("config", "processed_apepacks.json");
-                            if (Files.exists(processedPath)) {
-                                Files.delete(processedPath);
-                                showToast("Cleared processed .apepack history");
-                                apepackFiles = scanApepacks();
-                            }
-                        } catch (Exception e) {
-                            showToast("Failed to clear: " + e.getMessage());
-                        }
-                    }
-            ).bounds(panelX + 20, startY + 122, panelWidth - 40, 20).build());
         }
     }
 
@@ -659,13 +663,31 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     private void handleDownloadPackUpdate() {
-        if (downloading) {
+        if (downloading && !downloadPaused) {
             showToast("Download already in progress");
             return;
         }
+        
+        // If paused, resume
+        if (downloadPaused) {
+            downloadPaused = false;
+            statusText = Component.literal("Resuming download...");
+            Thread downloadThread = new Thread(() -> {
+                resumeDownload();
+            }, "PackUpdater-Resume");
+            downloadThread.setDaemon(true);
+            downloadThread.start();
+            return;
+        }
+        
         downloading = true;
+        downloadPaused = false;
         downloadProgress = 0.0;
         downloadStatus = "Starting download...";
+        downloadStartTime = System.currentTimeMillis();
+        downloadStartBytes = 0;
+        downloadTotalBytes = 0;
+        downloadSpeed = "";
         statusText = Component.literal("Downloading update...");
         if (downloadPackButton != null) {
             downloadPackButton.active = false;
@@ -673,9 +695,10 @@ public class PackUpdaterConfigScreen extends Screen {
         }
 
         Thread downloadThread = new Thread(() -> {
-            boolean success = downloadLatestApePack(ConfigManager.repo);
+            boolean success = downloadLatestApePackWithStats(ConfigManager.repo);
             Minecraft.getInstance().execute(() -> {
                 downloading = false;
+                downloadPaused = false;
                 if (success) {
                     downloadProgress = 1.0;
                     downloadStatus = "Download complete! Restart to install.";
@@ -699,6 +722,113 @@ public class PackUpdaterConfigScreen extends Screen {
         downloadThread.setDaemon(true);
         downloadThread.start();
     }
+    
+    private boolean downloadLatestApePackWithStats(String repo) {
+        try {
+            String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
+            URL url = URI.create(apiUrl).toURL();
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            ConfigManager.setupGitHubConnection(conn);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(30000);
+            if (conn.getResponseCode() != 200) return false;
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
+            reader.close();
+
+            for (JsonElement element : releases) {
+                JsonObject release = element.getAsJsonObject();
+                if (release.has("assets") && release.get("assets").isJsonArray()) {
+                    JsonArray assets = release.get("assets").getAsJsonArray();
+                    for (JsonElement assetElem : assets) {
+                        JsonObject asset = assetElem.getAsJsonObject();
+                        String name = asset.get("name").getAsString();
+                        if (name.toLowerCase().endsWith(".apepack2") || name.toLowerCase().endsWith(".apepack")) {
+                            String downloadUrl = asset.get("browser_download_url").getAsString();
+                            Path apepacksDir = PackUpdaterMod.getApepacksDir();
+                            Files.createDirectories(apepacksDir);
+                            Path target = apepacksDir.resolve(name);
+
+                            // Download with progress and stats
+                            HttpURLConnection dlConn = (HttpURLConnection) URI.create(downloadUrl).toURL().openConnection();
+                            ConfigManager.setupGitHubConnection(dlConn);
+                            dlConn.setConnectTimeout(5000);
+                            dlConn.setReadTimeout(60000);
+                            int responseCode = dlConn.getResponseCode();
+                            if (responseCode != 200) return false;
+
+                            long totalSize = dlConn.getContentLengthLong();
+                            long downloaded = 0;
+                            downloadStartTime = System.currentTimeMillis();
+                            downloadStartBytes = 0;
+                            downloadTotalBytes = totalSize;
+
+                            try (java.io.InputStream is = dlConn.getInputStream();
+                                 java.io.OutputStream os = Files.newOutputStream(target)) {
+                                byte[] buffer = new byte[8192];
+                                int bytesRead;
+                                while ((bytesRead = is.read(buffer)) != -1) {
+                                    if (downloadPaused) {
+                                        Thread.sleep(100);
+                                        continue;
+                                    }
+                                    os.write(buffer, 0, bytesRead);
+                                    downloaded += bytesRead;
+                                    if (totalSize > 0) {
+                                        double progress = (double) downloaded / totalSize;
+                                        long elapsed = (System.currentTimeMillis() - downloadStartTime) / 1000;
+                                        long speed = elapsed > 0 ? downloaded / elapsed / 1024 : 0;
+                                        final double p = progress;
+                                        final long d = downloaded;
+                                        final long spd = speed;
+                                        Minecraft.getInstance().execute(() -> {
+                                            downloadProgress = p;
+                                            downloadStatus = formatSize(d) + " / " + formatSize(totalSize) + " (" + (int)(p * 100) + "%)";
+                                            downloadSpeed = speed > 0 ? speed + " KB/s" : "";
+                                            statsText = "Speed: " + downloadSpeed + " | ETA: " + (speed > 0 ? ((totalSize - d) / speed / 1024) + "s" : "calculating...");
+                                        });
+                                    }
+                                }
+                            }
+
+                            Minecraft.getInstance().execute(() -> {
+                                downloadProgress = 1.0;
+                                downloadStatus = "Download complete!";
+                                statsText = "Total: " + formatSize(totalSize);
+                                showToast("Update downloaded: " + name);
+                            });
+
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Download failed: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    private void resumeDownload() {
+        // Simplified resume - restarts download from beginning for reliability
+        Thread downloadThread = new Thread(() -> {
+            boolean success = downloadLatestApePackWithStats(ConfigManager.repo);
+            Minecraft.getInstance().execute(() -> {
+                downloading = false;
+                downloadPaused = false;
+                if (success) {
+                    downloadProgress = 1.0;
+                    downloadStatus = "Download complete!";
+                    showToast("Download complete!");
+                }
+            });
+        }, "PackUpdater-Resume");
+        downloadThread.setDaemon(true);
+        downloadThread.start();
+    }
 
     private List<ApePackFileInfo> scanApepacks() {
         List<ApePackFileInfo> files = new ArrayList<>();
@@ -706,7 +836,7 @@ public class PackUpdaterConfigScreen extends Screen {
         if (!Files.exists(apepacksDir)) return files;
         try (var paths = Files.list(apepacksDir)) {
             files = paths
-                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
+                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
                     .sorted(Comparator.comparingLong((Path p) -> {
                         try { return Files.getLastModifiedTime(p).toMillis(); }
                         catch (Exception e) { return 0L; }
@@ -764,7 +894,9 @@ public class PackUpdaterConfigScreen extends Screen {
             }
         }
         try {
-            java.awt.Desktop.getDesktop().open(apepacksDir.toFile());
+            // Use absolute path to avoid instance\.\apepacks bug
+            Path absPath = apepacksDir.toAbsolutePath().normalize();
+            java.awt.Desktop.getDesktop().open(absPath.toFile());
             showToast("Opened apepacks folder");
         } catch (Exception e) {
             showToast("Could not open folder: " + apepacksDir.toAbsolutePath());
@@ -786,7 +918,7 @@ public class PackUpdaterConfigScreen extends Screen {
             startY += 70;
         }
 
-        // Bug 14: Download progress bar
+        // Bug 14: Download progress bar with statistics
         if (downloading || !downloadStatus.isEmpty()) {
             int barX = panelX + 20;
             int barY = startY;
@@ -809,7 +941,13 @@ public class PackUpdaterConfigScreen extends Screen {
             
             // Status text
             guiGraphics.centeredText(font, downloadStatus, centerX, barY + barH + 8, 0xFFFFFF);
-            startY += barH + 25;
+            
+            // Statistics
+            if (!statsText.isEmpty()) {
+                guiGraphics.centeredText(font, statsText, centerX, barY + barH + 22, 0xAAAAAA);
+            }
+            
+            startY += barH + 35;
         }
 
         if (installError == null) {
@@ -1036,7 +1174,8 @@ public class PackUpdaterConfigScreen extends Screen {
         repoField = new EditBox(font, panelX + 20, startY + 70, panelWidth - 40, 20, Component.literal("GitHub Repo"));
         repoField.setMaxLength(Integer.MAX_VALUE);
         repoField.setHint(Component.literal("user/repo or https://github.com/user/repo"));
-        repoField.setValue(ConfigManager.lastReleaseUrl != null ? ConfigManager.lastReleaseUrl : ConfigManager.repo);
+        // Always load from ConfigManager, not lastReleaseUrl
+        repoField.setValue(ConfigManager.repo);
         repoField.setResponder(text -> {
             String repo = extractRepoFromUrl(text);
             if (repo != null) ConfigManager.repo = repo;

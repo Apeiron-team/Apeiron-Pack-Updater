@@ -4,6 +4,29 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.2.0] - Major Feature Update - 2026-11-08
+
+### Added
+- **Mod list comparison screen** — New `ApePackDiffScreen` shows added, updated, and removed mods before installing an .apepack. Player can choose "Update Now (Restart)" or "Back to Main Menu"
+- **Auto-update notification on launch** — When an .apepack is found on startup, the import progress screen is shown automatically instead of silent background install. If the game is in-session, it installs silently in the background
+- **Download statistics** — Progress bar now shows download speed (KB/s), ETA, and percentage during .apepack downloads
+- **Download pause/resume** — Downloads can be paused and resumed from the config screen
+- **Backup before install** — Mods folder is backed up before extraction; on failure, the backup is restored automatically
+- **Changelog display** — Fetches and displays the release changelog from GitHub before downloading
+
+### Fixed
+- **Config persistence** — GitHub repo URL and token now persist across config screen close/reopen. Values are always loaded from `ConfigManager` instead of `lastReleaseUrl`
+- **Open Apepacks folder path** — Fixed `instance\.\apepacks` bug by using `toAbsolutePath().normalize()`
+- **.apepack2 download check** — Update checker now looks for both `.apepack2` and `.apepack` assets on GitHub releases
+- **Clear Processed button removed** — Removed the fundamentally useless "Clear Processed" button; the mod now automatically deletes .apepack files after successful install
+- **Version check from GitHub** — Compares `.apepack2` version from GitHub release against local `modpackVersion` in config
+
+### Changed
+- **Default repo** — Changed from `Apeiron-team/Apeiron-Pack-Updater` to `Apeiron-team/Apeiron-Vanilla-plus-v1` (the modpack repo)
+- **Browse .apepack flow** — Now shows the diff comparison screen before installing, letting the player review changes first
+
+---
+
 ## [1.1.9] - ApePack v2 File Extension Change - 2026-11-08
 
 ### Changed

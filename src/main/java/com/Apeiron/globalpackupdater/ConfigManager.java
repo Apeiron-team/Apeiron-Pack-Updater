@@ -10,15 +10,19 @@ import java.nio.file.Paths;
 public class ConfigManager {
     private static final Path CONFIG_PATH = Paths.get("config", "globalpackupdater.json");
 
-    public static String repo = "Apeiron-team/Apeiron-Pack-Updater";
+    public static String repo = "Apeiron-team/Apeiron-Vanilla-plus-v1"; // Default to the modpack repo
     public static String channel = "stable"; // stable, beta, nightly
     public static String lastReleaseUrl = null;
     public static String modpackVersion = "v0.0"; // Default modpack version
     public static String modpackName = ""; // Modpack name (set from .apepack)
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
     
+    // Download state for pause/resume
+    public static String downloadResumeUrl = ""; // URL to resume download from
+    public static long downloadResumeOffset = 0; // Byte offset for resuming
+    
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.1.9";
+    public static final String CURRENT_VERSION = "1.2.0";
 
     public static void loadConfig() {
         try {
@@ -31,6 +35,8 @@ public class ConfigManager {
                 if (json.has("modpackVersion")) modpackVersion = json.get("modpackVersion").getAsString();
                 if (json.has("modpackName")) modpackName = json.get("modpackName").getAsString();
                 if (json.has("githubToken")) githubToken = json.get("githubToken").getAsString();
+                if (json.has("downloadResumeUrl")) downloadResumeUrl = json.get("downloadResumeUrl").getAsString();
+                if (json.has("downloadResumeOffset")) downloadResumeOffset = json.get("downloadResumeOffset").getAsLong();
             } else {
                 saveConfig();
             }
@@ -54,6 +60,12 @@ public class ConfigManager {
             }
             if (!githubToken.isEmpty()) {
                 json.addProperty("githubToken", githubToken);
+            }
+            if (!downloadResumeUrl.isEmpty()) {
+                json.addProperty("downloadResumeUrl", downloadResumeUrl);
+            }
+            if (downloadResumeOffset > 0) {
+                json.addProperty("downloadResumeOffset", downloadResumeOffset);
             }
             Files.writeString(CONFIG_PATH, json.toString());
         } catch (Exception e) {
