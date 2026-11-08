@@ -135,9 +135,9 @@ public class ApePackImportScreen extends Screen {
                 System.out.println("[PackUpdater] Starting .apepack import: " + apepackFile.getFileName());
                 System.out.println("[PackUpdater] Extracting to: " + instanceRoot.toAbsolutePath());
 
-                ApePackLoader.InstallResult result = ApePackLoader.installApePackWithProgress(
+                ApePackLoaderV2.InstallResult result = ApePackLoaderV2.installApePackWithProgress(
                         apepackFile, instanceRoot,
-                        new ApePackLoader.ImportProgress() {
+                        new ApePackLoaderV2.ImportProgress() {
                             @Override
                             public void onFileStart(String fileName, String fileType, int current, int total) {
                                 Minecraft.getInstance().execute(() -> {
@@ -189,7 +189,7 @@ public class ApePackImportScreen extends Screen {
                                     currentFileType = "";
                                     // Mark the .apepack as processed and update modpack version
                                     if (success) {
-                                        ApePackLoader.markApePackAsProcessed(apepackFile);
+                                        ApePackLoaderV2.markApePackAsProcessed(apepackFile);
                                         // Update the modpack version in the config
                                         if (!packVersion.isEmpty()) {
                                             ConfigManager.updateModpackVersion(packVersion);

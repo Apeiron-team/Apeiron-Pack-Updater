@@ -146,7 +146,7 @@ public class ApePackLoader {
      * E.g., "sodium-0.6.13+mc26.1.2.jar" -> "sodium"
      * E.g., "c2me-neoforge-mc26.1.2-0.3.0.jar" -> "c2me-neoforge-mc26.1.2"
      */
-    private static String extractModBaseName(String jarFileName) {
+    static String extractModBaseName(String jarFileName) {
         // Remove .jar extension
         String name = jarFileName;
         if (name.toLowerCase().endsWith(".jar")) {
@@ -181,7 +181,7 @@ public class ApePackLoader {
      * E.g., "sodium-0.6.13+mc26.1.2.jar" -> "0.6.13+mc26.1.2"
      * E.g., "c2me-neoforge-mc26.1.2-0.3.0.jar" -> "0.3.0"
      */
-    private static String extractModVersion(String jarFileName) {
+    static String extractModVersion(String jarFileName) {
         String name = jarFileName;
         if (name.toLowerCase().endsWith(".jar")) {
             name = name.substring(0, name.length() - 4);
@@ -203,7 +203,7 @@ public class ApePackLoader {
      * Compares two version strings. Returns positive if v1 > v2, negative if v1 < v2, 0 if equal.
      * Handles versions like "1.2.3", "0.6.13+mc26.1.2", "alpha.0.89", etc.
      */
-    private static int compareVersions(String v1, String v2) {
+    static int compareVersions(String v1, String v2) {
         if (v1 == null || v1.isEmpty()) return -1;
         if (v2 == null || v2.isEmpty()) return 1;
         if (v1.equals(v2)) return 0;

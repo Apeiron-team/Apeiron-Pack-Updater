@@ -13,6 +13,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -61,6 +62,9 @@ public class PackUpdaterConfigScreen extends Screen {
     // Generate state
     private EditBox packNameField;
     private EditBox packVersionField;
+    private Button generateButton;
+    private boolean generating = false;
+    private String generateProgress = "";
 
     // Apepacks tab state
     private List<ApePackFileInfo> apepackFiles = new ArrayList<>();
@@ -874,13 +878,21 @@ public class PackUpdaterConfigScreen extends Screen {
         addRenderableWidget(packVersionField);
 
         // Generate button
-        addRenderableWidget(Button.builder(
+        generateButton = Button.builder(
                 Component.literal("Generate .apepack"),
                 button -> handleGenerateApePack()
-        ).bounds(panelX + 20, startY + 90, panelWidth - 40, 20).build());
+        ).bounds(panelX + 20, startY + 90, panelWidth - 40, 20).build();
+        addRenderableWidget(generateButton);
     }
 
     private void handleGenerateApePack() {
+        // Prevent concurrent generation runs
+        if (generating) {
+            statusText = Component.literal("Generation already in progress, please wait...");
+            showToast("Already generating, please wait");
+            return;
+        }
+
         String packName = packNameField != null ? packNameField.getValue().trim() : "";
         String packVersion = packVersionField != null ? packVersionField.getValue().trim() : "";
 
@@ -895,23 +907,62 @@ public class PackUpdaterConfigScreen extends Screen {
             return;
         }
 
-        statusText = Component.literal("Generating .apepack file...");
-        showToast("Generating .apepack...");
+        // Lock the generation process
+        generating = true;
+        generateProgress = "";
+        if (generateButton != null) {
+            generateButton.active = false;
+            generateButton.setMessage(Component.literal("Generating..."));
+        }
+        packNameField.active = false;
+        packVersionField.active = false;
+
+        statusText = Component.literal("Starting .apepackv2 generation...");
+        showToast("Generating .apepackv2...");
 
         Thread genThread = new Thread(() -> {
             try {
                 Path instanceRoot = Path.of(".");
+                
+                // Clean up any stale temp directory from a previous failed run
+                Path staleTempDir = instanceRoot.toAbsolutePath().resolve("apepack_chunks_tmp");
+                if (Files.exists(staleTempDir)) {
+                    updateProgress("Cleaning up previous temp files...");
+                    try {
+                        Files.walk(staleTempDir)
+                            .sorted(Comparator.reverseOrder())
+                            .forEach(path -> {
+                                try { Files.delete(path); } catch (IOException ignored) {}
+                            });
+                    } catch (IOException ignored) {}
+                }
+
                 Path outputFile = instanceRoot.resolve("generated_" + packName.replace(" ", "_") + "_" + packVersion + ".apepack");
                 String mcVersion = "26.1.2";
+                String modLoader = "neoforge-26.1.2.122";
 
-                ApePackGenerator.GenerateResult result = ApePackGenerator.generate(
-                        instanceRoot, outputFile, packName, packVersion, mcVersion);
+                // Progress callback for real-time updates
+                java.util.function.Consumer<String> progressCallback = msg -> {
+                    updateProgress(msg);
+                };
+
+                ApePackV2.V2GenerateResult result = ApePackGeneratorV2.generate(
+                        instanceRoot, outputFile, packName, packVersion, mcVersion, modLoader, progressCallback);
 
                 Minecraft.getInstance().execute(() -> {
+                    generating = false;
+                    if (generateButton != null) {
+                        generateButton.active = true;
+                        generateButton.setMessage(Component.literal("Generate .apepack"));
+                    }
+                    if (packNameField != null) packNameField.active = true;
+                    if (packVersionField != null) packVersionField.active = true;
+
                     if (result.success) {
                         statusText = Component.literal(
-                                ".apepack generated! " + result.modCount + " mods, " +
-                                result.configCount + " configs, " + result.scriptCount + " scripts.");
+                                ".apepackv2 generated! " + result.modCount + " mods, " +
+                                result.configCount + " configs, " + result.scriptCount + " scripts. " +
+                                String.format("(%.1f%% compressed)", result.compressionRatio));
                         showToast("Generated: " + outputFile.getFileName());
                     } else {
                         statusText = Component.literal("Error: " + result.errorMessage);
@@ -920,6 +971,13 @@ public class PackUpdaterConfigScreen extends Screen {
                 });
             } catch (Exception e) {
                 Minecraft.getInstance().execute(() -> {
+                    generating = false;
+                    if (generateButton != null) {
+                        generateButton.active = true;
+                        generateButton.setMessage(Component.literal("Generate .apepack"));
+                    }
+                    if (packNameField != null) packNameField.active = true;
+                    if (packVersionField != null) packVersionField.active = true;
                     statusText = Component.literal("Error: " + e.getMessage());
                     showToast("Error: " + e.getMessage());
                 });
@@ -927,6 +985,13 @@ public class PackUpdaterConfigScreen extends Screen {
         }, "PackUpdater-Generate");
         genThread.setDaemon(true);
         genThread.start();
+    }
+
+    private void updateProgress(String msg) {
+        generateProgress = msg;
+        Minecraft.getInstance().execute(() -> {
+            statusText = Component.literal(msg);
+        });
     }
 
     private void renderGenerateTab(GuiGraphicsExtractor guiGraphics) {

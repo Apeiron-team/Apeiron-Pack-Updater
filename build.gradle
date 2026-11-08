@@ -3,7 +3,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.148'
 }
 
-version = '1.0.1'
+version = '1.1.8'
 group = 'com.Apeiron.globalpackupdater'
 
 base {
@@ -18,6 +18,19 @@ repositories {
 
 dependencies {
     implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'org.tukaani:xz:1.10'
+}
+
+// Bundle third-party libraries into the mod JAR so they're available at runtime
+jar {
+    duplicatesStrategy = 'exclude'
+    from {
+        configurations.runtimeClasspath.files.findAll { file ->
+            file.name.contains('xz') || file.name.contains('commons-compress')
+        }.collect { zipTree(it) }
+    }
+    // Avoid overwriting NeoForge's own files
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'module-info.class', 'META-INF/versions/**'
 }
 
 // Replace ${version} in mods.toml with the actual project version

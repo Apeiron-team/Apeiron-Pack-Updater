@@ -4,6 +4,147 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.1.8] - ApePack v2 Auto-Restart Fix - 2026-11-08
+
+### Fixed
+- **Game doesn't restart after extraction** — The `onComplete(true, null)` callback was never called after a successful v2 `.apepack` extraction in `installV2Pack()`. This meant `installResult[0]` in `PackUpdaterMod` stayed `false`, so the game relauncher was never triggered. Now the completion callback fires after all files are extracted, allowing the auto-restart to work as intended.
+
+### Notes
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.7] - ApePack v2 Generation Lock and Progress Feedback - 2026-11-08
+
+### Fixed
+- **Generation restarts on button click** — Added a `generating` lock flag that prevents the "Generate .apepack" button from being clicked multiple times. Each click no longer spawns a new thread that conflicts with the previous run's temp files.
+- **Stale temp directory conflicts** — Before starting generation, any leftover `apepack_chunks_tmp` directory from a previous failed run is cleaned up to prevent file conflicts.
+
+### Added
+- **Real-time progress feedback** — Config screen now shows live status updates during generation: "Scanning mods...", "Computing file hashes...", "Compressing chunk_001...", "Building archive...", etc.
+- **Button disabling during generation** — Generate button is disabled and shows "Generating..." text while compression is in progress. Input fields are also locked to prevent changes mid-generation.
+- **Progress callback system** — `ApePackGeneratorV2.generate()` now accepts an optional progress callback that reports each major step to the UI.
+
+### Changed
+- **Version** — Bumped from 1.1.6 to 1.1.7
+
+### Notes
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.6] - ApePack v2 Temp File Retention Fix - 2026-11-08
+
+### Fixed
+- **Temp files deleted too early** — Each chunk's uncompressed `.tmp` file was deleted immediately after XZ compression, causing `NoSuchFileException` when subsequent chunks tried to access shared temp directory resources. All temp files (`.tmp` and `.xz`) now remain until the entire .apepack archive is fully built.
+- **Premature chunk file deletion** — Compressed `.xz` chunk files were deleted one-by-one as they were written to the archive. Now all chunk files stay intact until the archive is complete, then a single cleanup pass removes everything.
+
+### Changed
+- **Cleanup timing** — Moved all temp file cleanup to after the ZIP archive is closed and verified, with logging to confirm cleanup success.
+- **createChunkFile()** — No longer deletes the temporary uncompressed file; cleanup is centralized in `generate()`.
+
+### Notes
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.4] - ApePack v2 Runtime Fix - 2026-11-08
+
+### Fixed
+- **XZ library runtime error** — Added `jar` task in `build.gradle` to bundle the XZ compression library (`org.tukaani:xz:1.10`) and commons-compress into the mod JAR at runtime, so ApePack v2 generation works without `NoClassDefFoundError`.
+
+### Changed
+- **JAR packaging** — Third-party libraries are now included inside the mod JAR with `duplicatesStrategy = 'exclude'` and exclusions for signature files and module-info.
+
+### Notes
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.5] - ApePack v2 Temp File Path Fix - 2026-11-08
+
+### Fixed
+- **NoSuchFileException during chunk compression** — Temp chunk files (`.tmp`) were created with relative paths that didn't resolve correctly during in-game execution. All temp file paths now use absolute paths (`toAbsolutePath()`) to ensure the compression step can find the files it created.
+- **Missing temp file validation** — Added existence check before compressing each chunk, with a clear error message if the file disappears.
+- **Duplicate log messages** — Removed duplicate "Using temp directory" log output.
+
+### Changed
+- **Temp file path resolution** — All paths in `createChunkFile()` now use absolute paths for reading and writing.
+- **Debug logging** — Added temp file size and path logging before compression for easier debugging.
+
+### Notes
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.3] - ApePack v2 Extreme Compression - 2026-11-08
+
+### Fixed
+- **Poor GZIP compression ratio** — GZIP only achieved 8% compression (160 MB → 147 MB) because mod JAR files are already ZIP-compressed. Switched to XZ/LZMA2 compression (preset 9) which achieves 60-80% better ratios for already-compressed files.
+
+### Changed
+- **Compression algorithm** — Replaced GZIP with XZ/LZMA2 via `org.tukaani:xz:1.10` dependency. Expected compression ratio: 160 MB → ~20-40 MB (75-87% reduction).
+- **Chunk file format** — v2 chunks now use `.xz` extension instead of `.gz`.
+- **Backward compatibility** — Loader automatically detects compression type and falls back to GZIP for older v2 files.
+- **Larger buffer** — XZ compression uses 64KB buffer for better performance.
+
+### Notes
+- XZ/LZMA2 compression is slower than GZIP but produces much smaller files.
+- Extraction speed is maintained through parallel thread pools.
+- This is a testing release — not published to GitHub yet.
+
+---
+
+## [1.1.2] - ApePack v2 Compression Fix - 2026-11-08
+
+### Fixed
+- **Zstd NoClassDefFoundError** — Replaced Zstd compression with Java's built-in GZIP compression, eliminating the external native library dependency that caused `NoClassDefFoundError` at runtime
+- **Generation output directory** — Generated .apepack files now save in the instance folder instead of a random temp directory in AppData
+- **Chunk file handling** — Chunk files are now created in the instance folder during generation and properly cleaned up after the archive is built
+
+### Changed
+- **Compression** — Switched from Zstd (level 22) to GZIP (level 9) — still lossless, no external dependencies required
+- **Version** — Bumped from 1.1.1 to 1.1.2 (patch release for v2 compression fix)
+
+---
+
+## [1.1.1] - ApePack v2 Patch - 2026-11-08
+
+### Fixed
+- **Zstd compression not working** — Chunk files now use Java's temp directory instead of the current working directory, fixing in-game generation
+- **Format labeling** — v2 .apepack files are now labeled as "apepackv2" in apepack.json for clear format identification
+- **Script count** — Fixed scriptCount not being returned from scanKubeJS() method
+- **Compression progress** — Added logging for chunk compression progress and ratio
+
+### Changed
+- **Version** — Bumped from 1.1.0 to 1.1.1 (patch release for v2 fixes)
+
+---
+
+## [1.1.0] - ApePack v2 Beta - 2026-11-08
+
+### Added
+- **ApePack v2 format** — New generation and loading system with Zstd compression (level 22) for smaller archive sizes
+- **Parallel extraction** — Multi-threaded file extraction using thread pools for faster installation
+- **Archive integrity verification** — SHA-256 checksum of the entire archive plus per-file verification
+- **Dependency detection** — Automatically detects mod dependencies from mod metadata
+- **Config conflict resolution** — Strategies for handling config conflicts: overwrite, merge, skip, backup
+- **Resource pack support** — Includes resource packs in generated .apepack files
+- **Data pack support** — Includes data packs in generated .apepack files
+- **Chunk-based storage** — Files are stored in compressed chunks for efficient extraction
+- **Backward compatibility** — v2 loader can still read and install v1 .apepack files
+
+### Changed
+- **Zstd compression library** — Added `zstd-jni:1.5.7-22` dependency for maximum compression ratio
+- **ApePackLoader helper methods** — Changed package-private visibility for v2 access
+
+### Notes
+- ApePack v2 is still being refined — this release is for testing only
+- World template support is not included (reserved for future skyblock modpack fork)
+- v2 files are fully compatible with v1 files (backward compatible)
+
+---
+
 ## [1.0.1] - Patch - 2026-11-08
 
 ### Fixed

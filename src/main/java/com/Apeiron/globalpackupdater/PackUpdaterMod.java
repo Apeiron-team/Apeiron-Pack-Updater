@@ -79,7 +79,7 @@ public class PackUpdaterMod {
                     try (Stream<Path> paths = Files.list(modsDir)) {
                         apepackFile = paths
                                 .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
-                                .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
+                                .filter(p -> !ApePackLoaderV2.isApePackAlreadyProcessed(p))
                                 .findFirst()
                                 .orElse(null);
                     }
@@ -88,7 +88,7 @@ public class PackUpdaterMod {
                     try (Stream<Path> paths = Files.list(apepacksDir)) {
                         List<Path> apepacks = paths
                                 .filter(p -> p.toString().toLowerCase().endsWith(".apepack"))
-                                .filter(p -> !ApePackLoader.isApePackAlreadyProcessed(p))
+                                .filter(p -> !ApePackLoaderV2.isApePackAlreadyProcessed(p))
                                 .sorted(Comparator.comparingLong(p -> {
                                     try { return Files.getLastModifiedTime(p).toMillis(); }
                                     catch (IOException e) { return 0L; }
@@ -113,9 +113,9 @@ public class PackUpdaterMod {
 
                         // Run installation on this background thread (no UI updates needed)
                         try {
-                            ApePackLoader.InstallResult result = ApePackLoader.installApePackWithProgress(
+                            ApePackLoaderV2.InstallResult result = ApePackLoaderV2.installApePackWithProgress(
                                     finalApepackFile, INSTANCE_ROOT,
-                                    new ApePackLoader.ImportProgress() {
+                                    new ApePackLoaderV2.ImportProgress() {
                                         @Override
                                         public void onFileStart(String fileName, String fileType, int current, int total) {
                                             System.out.println("[PackUpdater] Installing: " + fileName + " (" + fileType + ") [" + current + "/" + total + "]");
@@ -149,7 +149,7 @@ public class PackUpdaterMod {
                                             installError[0] = error;
                                             if (success) {
                                                 // Mark as processed, update version, delete .apepack
-                                                ApePackLoader.markApePackAsProcessed(finalApepackFile);
+                                                ApePackLoaderV2.markApePackAsProcessed(finalApepackFile);
                                                 // Update modpack version from the apepack
                                                 try {
                                                     String version = extractApePackVersion(finalApepackFile);
