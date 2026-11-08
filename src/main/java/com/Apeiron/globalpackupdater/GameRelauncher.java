@@ -481,11 +481,13 @@ public class GameRelauncher {
                 for (JsonElement elem : arguments.get("game").getAsJsonArray()) {
                     if (elem.isJsonPrimitive()) {
                         String arg = resolveGameVariable(elem.getAsString(), instanceRoot, neoForgeVersion);
+                        // Skip --demo which causes Minecraft to launch in demo mode
+                        if (arg.equals("--demo")) continue;
                         args.add(arg);
                     } else if (elem.isJsonObject()) {
-                        // Game args with rules
+                        // Game args with rules - skip --demo
                         String arg = resolveGameArgWithRules(elem.getAsJsonObject(), instanceRoot, neoForgeVersion);
-                        if (arg != null) args.add(arg);
+                        if (arg != null && !arg.equals("--demo")) args.add(arg);
                     }
                 }
             }
@@ -498,6 +500,7 @@ public class GameRelauncher {
                 for (JsonElement elem : arguments.get("game").getAsJsonArray()) {
                     if (elem.isJsonPrimitive()) {
                         String arg = resolveGameVariable(elem.getAsString(), instanceRoot, neoForgeVersion);
+                        if (arg.equals("--demo")) continue;
                         args.add(arg);
                     }
                 }
@@ -574,10 +577,12 @@ public class GameRelauncher {
                 .replace("${auth_access_token}", "")
                 .replace("${user_type}", "msa")
                 .replace("${version_name}", neoForgeVersion)
+                .replace("${version_type}", "modded")
                 .replace("${game_directory}", gameDir)
                 .replace("${assets_root}", INSTALL_DIR.resolve("assets").toString().replace("\\", "/"))
                 .replace("${assets_index_name}", "unknown")
                 .replace("${auth_uuid}", "00000000-0000-0000-0000-000000000000")
+                .replace("${auth_xuid}", "")
                 .replace("${user_properties}", "{}")
                 .replace("${clientid}", "")
                 .replace("${library_directory}", librariesDir)

@@ -2,6 +2,11 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.36] - 2026-11-08
+
+### Fixed
+- **Game relaunch launched into Minecraft demo version** — The base Minecraft version JSON contained a `--demo` game argument that was always included, causing Minecraft to launch in demo mode instead of the full modded game. All `--demo` arguments are now filtered out from game args (both simple and rule-based). Added `${version_type}` variable resolution set to `modded` and `${auth_xuid}` resolution set to empty string.
+
 ## [0.0.35] - 2026-11-08
 
 ### Fixed
