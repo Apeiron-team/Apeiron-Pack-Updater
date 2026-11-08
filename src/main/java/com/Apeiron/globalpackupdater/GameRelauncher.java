@@ -321,10 +321,73 @@ public class GameRelauncher {
     }
 
     /**
+     * Reads the instance config file (minecraftinstance.json) to get RAM allocation and custom JVM args.
+     * Returns a list of JVM args derived from the instance settings.
+     */
+    private static List<String> readInstanceJvmArgs(Path instanceRoot) {
+        List<String> args = new ArrayList<>();
+        
+        // Try to find minecraftinstance.json in the instance root
+        Path instanceConfig = instanceRoot.resolve("minecraftinstance.json");
+        if (!Files.exists(instanceConfig)) {
+            // Try parent directory (in case instanceRoot is a subdirectory)
+            instanceConfig = instanceRoot.resolve("..").resolve("minecraftinstance.json");
+        }
+        if (!Files.exists(instanceConfig)) {
+            System.out.println("[PackUpdater] No minecraftinstance.json found, using default JVM args");
+            return args;
+        }
+        
+        try {
+            JsonObject config = parseJson(instanceConfig);
+            System.out.println("[PackUpdater] Reading instance config: " + instanceConfig.toAbsolutePath());
+            
+            // Read allocated memory (in MB)
+            int allocatedMemory = 2048; // Default 2GB
+            if (config.has("allocatedMemory") && config.get("allocatedMemory").isJsonPrimitive()) {
+                allocatedMemory = config.get("allocatedMemory").getAsInt();
+            }
+            System.out.println("[PackUpdater] Instance allocated memory: " + allocatedMemory + " MB");
+            
+            // Add memory args: -Xms and -Xmx
+            // Set initial heap to half of max (minimum 1024MB)
+            int initialMemory = Math.max(1024, allocatedMemory / 2);
+            args.add("-Xms" + initialMemory + "m");
+            args.add("-Xmx" + allocatedMemory + "m");
+            System.out.println("[PackUpdater] JVM memory args: -Xms" + initialMemory + "m -Xmx" + allocatedMemory + "m");
+            
+            // Read custom JVM args override if set
+            if (config.has("javaArgsOverride") && config.get("javaArgsOverride").isJsonPrimitive()) {
+                String customArgs = config.get("javaArgsOverride").getAsString().trim();
+                if (!customArgs.isEmpty()) {
+                    System.out.println("[PackUpdater] Custom JVM args: " + customArgs);
+                    // Split by whitespace to handle multiple args
+                    String[] parts = customArgs.split("\\s+");
+                    for (String part : parts) {
+                        if (!part.isEmpty()) {
+                            args.add(part);
+                        }
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to read instance config: " + e.getMessage());
+        }
+        
+        return args;
+    }
+
+    /**
      * Merges JVM arguments from base and NeoForge version JSONs, resolving variables.
+     * Also reads instance-specific JVM args (RAM allocation, custom args).
      */
     private static List<String> mergeJvmArgs(JsonObject baseData, JsonObject neoForgeData, Path instanceRoot, String neoForgeVersion) {
         List<String> args = new ArrayList<>();
+
+        // First, add instance-specific JVM args (RAM allocation, custom args)
+        List<String> instanceArgs = readInstanceJvmArgs(instanceRoot);
+        args.addAll(instanceArgs);
 
         // Base JVM args
         if (baseData.has("arguments") && baseData.get("arguments").isJsonObject()) {
@@ -335,6 +398,10 @@ public class GameRelauncher {
                         String raw = elem.getAsString();
                         // Skip -cp and ${classpath} entries from the version JSON - we handle classpath ourselves
                         if (raw.equals("-cp") || raw.equals("-classpath") || raw.equals("${classpath}")) {
+                            continue;
+                        }
+                        // Skip memory args if instance config already provided them
+                        if (raw.startsWith("-Xms") || raw.startsWith("-Xmx")) {
                             continue;
                         }
                         if (raw.startsWith("-")) {
@@ -359,6 +426,10 @@ public class GameRelauncher {
                         String raw = elem.getAsString();
                         // Skip -cp and ${classpath} entries
                         if (raw.equals("-cp") || raw.equals("-classpath") || raw.equals("${classpath}")) {
+                            continue;
+                        }
+                        // Skip memory args if instance config already provided them
+                        if (raw.startsWith("-Xms") || raw.startsWith("-Xmx")) {
                             continue;
                         }
                         String arg = resolveJvmVariable(raw, instanceRoot, neoForgeVersion);

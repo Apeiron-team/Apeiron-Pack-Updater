@@ -2,6 +2,15 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.38] - 2026-11-08
+
+### Added
+- **RAM allocation preservation on relaunch** — The game relauncher now reads `minecraftinstance.json` from the instance folder to get the `allocatedMemory` value (RAM in MB) set by CurseForge or other launchers. The relaunched JVM process now uses the same `-Xms` (initial heap, half of max) and `-Xmx` (max heap) flags as the original instance.
+- **Custom JVM args support** — If `javaArgsOverride` is set in the instance config, those custom JVM arguments are also passed to the relaunched process.
+
+### Fixed
+- Relauncher no longer loses RAM allocation settings when restarting the game after an .apepack update.
+
 ## [0.0.37] - 2026-11-08
 
 ### Fixed
