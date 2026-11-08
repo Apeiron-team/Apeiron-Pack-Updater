@@ -72,13 +72,13 @@ public class ApePackImportScreen extends Screen {
 
         // Complete state — show restart and done buttons
         if (importSuccess) {
-            // "🔄 Restart Game" button — spawns a new JVM to relaunch Minecraft
+            // "Restart Game" button — spawns a new JVM to relaunch Minecraft
             this.relaunchButton = this.addRenderableWidget(Button.builder(
-                    Component.literal("🔄 Restart Game"),
+                    Component.literal("Restart Game"),
                     button -> {
                         // Block the button to prevent double-clicks
                         button.active = false;
-                        button.setMessage(Component.literal("⏳ Starting..."));
+                        button.setMessage(Component.literal("Starting..."));
 
                         // Run relaunch on a background thread to avoid blocking the UI
                         Thread relaunchThread = new Thread(() -> {
@@ -91,7 +91,7 @@ public class ApePackImportScreen extends Screen {
                                 } else {
                                     System.err.println("[PackUpdater] Relaunch failed, falling back to title screen.");
                                     button.active = true;
-                                    button.setMessage(Component.literal("❌ Restart Failed"));
+                                    button.setMessage(Component.literal("Restart Failed"));
                                 }
                             });
                         }, "PackUpdater-Relaunch");
@@ -201,13 +201,13 @@ public class ApePackImportScreen extends Screen {
                                         } catch (Exception e) {
                                             System.err.println("[PackUpdater] Failed to remove .apepack file: " + e.getMessage());
                                         }
-                                        System.out.println("[PackUpdater] ✅ .apepack installation complete! Restart recommended.");
+                                        System.out.println("[PackUpdater] .apepack installation complete! Restart recommended.");
                                         // Show system toast notification for successful update
                                         if (!packName.isEmpty() && !packVersion.isEmpty()) {
                                             PackUpdaterMod.showUpdateSuccessToast(packName, packVersion);
                                         }
                                     } else {
-                                        System.err.println("[PackUpdater] ❌ .apepack installation failed: " + error);
+                                        System.err.println("[PackUpdater] .apepack installation failed: " + error);
                                     }
                                     // Reset the global installation flag so future installs can proceed
                                     PackUpdaterMod.installing.set(false);
@@ -314,7 +314,7 @@ public class ApePackImportScreen extends Screen {
                     centerX, barY + barHeight + 50, 0xCCCCCC);
 
             // Warning message - do not close
-            guiGraphics.centeredText(this.font, "⚠ Do not close the game until extraction is complete", centerX, barY + barHeight + 75, 0xFF9933);
+            guiGraphics.centeredText(this.font, "Do not close the game until extraction is complete", centerX, barY + barHeight + 75, 0xFF9933);
 
         } else {
             // Summary

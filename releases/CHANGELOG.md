@@ -2,6 +2,18 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.37] - 2026-11-08
+
+### Fixed
+- **Main menu background missing after relaunch** — The game relauncher was setting `${assets_index_name}` to `"unknown"` instead of reading the correct value from the base Minecraft version JSON (e.g., `"30"` for MC 26.1.2). This caused the panorama textures and main menu background to not load. Now reads the assets index dynamically from `26.1.2.json`.
+- **Config screen icons showing as boxes** — Replaced all Unicode emoji characters (🔄, 📦, 🛠, ⚙, 🔧, 📂, 📥, 🗑, ✅, ❌, ⚠️, ⏳, 🔍, ⬇, 🔐, 🏠, 📁, 🖥) with plain text alternatives throughout the entire mod. Minecraft's default font does not support emoji glyphs, so they rendered as empty boxes.
+- **File picker icons** — Replaced emoji in file picker buttons (Home, Downloads, Desktop) and directory prefixes with plain text (`[DIR]` for folders).
+
+### Changed
+- All toast notifications now use plain text instead of emoji prefixes
+- Progress status text uses plain labels (Checking, Downloading, Verifying, Complete, Failed)
+- Main menu notification overlay uses ASCII icons (`[↓]`, `[•]`, `[✓]`, `[✗]`)
+
 ## [0.0.36] - 2026-11-08
 
 ### Fixed

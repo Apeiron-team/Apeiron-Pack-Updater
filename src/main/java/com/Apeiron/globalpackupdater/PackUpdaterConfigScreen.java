@@ -125,25 +125,25 @@ public class PackUpdaterConfigScreen extends Screen {
         }
 
         btnUpdates = addRenderableWidget(Button.builder(
-                Component.literal("🔄 Updates"),
+                Component.literal("Updates"),
                 b -> switchTab(TabId.UPDATES)
         ).bounds(positions[0], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnUpdates);
 
         btnApepacks = addRenderableWidget(Button.builder(
-                Component.literal("📦 Apepacks"),
+                Component.literal("Apepacks"),
                 b -> switchTab(TabId.APEPACKS)
         ).bounds(positions[1], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnApepacks);
 
         btnGenerate = addRenderableWidget(Button.builder(
-                Component.literal("🛠 Generate"),
+                Component.literal("Generate"),
                 b -> switchTab(TabId.GENERATE)
         ).bounds(positions[2], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnGenerate);
 
         btnSettings = addRenderableWidget(Button.builder(
-                Component.literal("⚙ Settings"),
+                Component.literal("Settings"),
                 b -> switchTab(TabId.SETTINGS)
         ).bounds(positions[3], tabBarY, tabWidth, tabHeight).build());
         tabButtons.add(btnSettings);
@@ -478,19 +478,19 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Pack version display — checks for .apepack pack updates, NOT mod updates
         addRenderableWidget(Button.builder(
-                Component.literal("📦 Pack: " + ConfigManager.modpackVersion),
+                Component.literal("Pack: " + ConfigManager.modpackVersion),
                 button -> {
                     Thread checkThread = new Thread(() -> {
                         UpdateCheckResult result = checkForPackUpdates(ConfigManager.repo, ConfigManager.channel);
                         Minecraft.getInstance().execute(() -> {
                             if (result.success && result.updateAvailable) {
-                                showToast("🔄 Pack update: v" + result.version + " (installed: " + ConfigManager.modpackVersion + ")");
+                                showToast("Pack update: v" + result.version + " (installed: " + ConfigManager.modpackVersion + ")");
                                 statusText = Component.literal("Pack update available: v" + result.version);
                             } else if (result.success) {
-                                showToast("✅ Pack up to date: " + ConfigManager.modpackVersion);
+                                showToast("Pack up to date: " + ConfigManager.modpackVersion);
                                 statusText = Component.literal("Pack up to date: " + ConfigManager.modpackVersion);
                             } else {
-                                showToast("❌ " + result.message);
+                                showToast("Error: " + result.message);
                                 statusText = Component.literal(result.message);
                             }
                         });
@@ -502,7 +502,7 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Mod version display
         addRenderableWidget(Button.builder(
-                Component.literal("🔧 Mod: v" + ConfigManager.CURRENT_VERSION),
+                Component.literal("Mod: v" + ConfigManager.CURRENT_VERSION),
                 button -> {}
         ).bounds(panelX + 20, startY + 38, panelWidth - 40, 20).build());
 
@@ -516,7 +516,7 @@ public class PackUpdaterConfigScreen extends Screen {
     private void handleCheckForUpdate() {
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
         if (dm.downloading) {
-            showToast("⚠️ Download already in progress");
+            showToast("Download already in progress");
             return;
         }
         blockUpdateButtons(true);
@@ -535,7 +535,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     dm.updateAvailable = result.updateAvailable;
                     if (result.updateAvailable) {
                         statusText = Component.literal("Update available: v" + result.version);
-                        showToast("🔄 Update available: v" + result.version);
+                        showToast("Update available: v" + result.version);
                         dm.setIdle();
                         int bx = checkButton.getX(), by = checkButton.getY(), bw = checkButton.getWidth(), bh = checkButton.getHeight();
                         removeWidget(checkButton);
@@ -547,7 +547,7 @@ public class PackUpdaterConfigScreen extends Screen {
                         blockUpdateButtons(false);
                     } else {
                         statusText = Component.literal("You're up to date!");
-                        showToast("✅ You're up to date!");
+                        showToast("You're up to date!");
                         dm.setIdle();
                         int bx = checkButton.getX(), by = checkButton.getY(), bw = checkButton.getWidth(), bh = checkButton.getHeight();
                         removeWidget(checkButton);
@@ -560,7 +560,7 @@ public class PackUpdaterConfigScreen extends Screen {
                     }
                 } else {
                     statusText = Component.literal(result.message);
-                    showToast("❌ " + result.message);
+                    showToast("Error: " + result.message);
                     dm.setError(result.message);
                     downloadButton = null;
                     blockUpdateButtons(false);
@@ -574,7 +574,7 @@ public class PackUpdaterConfigScreen extends Screen {
     private void handleDownloadUpdate() {
         PackUpdaterMod.DownloadManager dm = PackUpdaterMod.downloadManager;
         if (dm.downloading) {
-            showToast("⚠️ Download already in progress");
+            showToast("Download already in progress");
             return;
         }
         statusText = Component.literal("Downloading update...");
@@ -584,15 +584,15 @@ public class PackUpdaterConfigScreen extends Screen {
             boolean success = PackUpdaterMod.downloadLatestApePack(ConfigManager.repo);
             Minecraft.getInstance().execute(() -> {
                 if (success) {
-                    statusText = Component.literal("✅ Update downloaded! Restart to install.");
-                    showToast("✅ Update downloaded! Restart to install.");
+                    statusText = Component.literal("Update downloaded! Restart to install.");
+                    showToast("Update downloaded! Restart to install.");
                     dm.setIdle();
                     downloadButton = null;
                     blockUpdateButtons(false);
                 } else {
                     String errorMsg = dm.errorMessage != null ? dm.errorMessage : "Download failed";
                     statusText = Component.literal("Download failed: " + errorMsg);
-                    showToast("❌ " + errorMsg);
+                    showToast("Error: " + errorMsg);
                     downloadButton = null;
                     blockUpdateButtons(false);
                 }
@@ -622,11 +622,11 @@ public class PackUpdaterConfigScreen extends Screen {
             String sText;
             int statusColor;
             switch (dm.status) {
-                case CHECKING -> { sText = "🔍 Checking..."; statusColor = 0x88CCFF; }
-                case DOWNLOADING -> { sText = "⬇ Downloading..."; statusColor = 0x88CCFF; }
-                case VERIFYING -> { sText = "🔐 Verifying..."; statusColor = 0xFFAA00; }
-                case DONE -> { sText = "✅ Complete!"; statusColor = 0x55FF55; }
-                case ERROR -> { sText = "❌ Failed!"; statusColor = 0xFF5555; }
+                case CHECKING -> { sText = "Checking..."; statusColor = 0x88CCFF; }
+                case DOWNLOADING -> { sText = "Downloading..."; statusColor = 0x88CCFF; }
+                case VERIFYING -> { sText = "Verifying..."; statusColor = 0xFFAA00; }
+                case DONE -> { sText = "Complete!"; statusColor = 0x55FF55; }
+                case ERROR -> { sText = "Failed!"; statusColor = 0xFF5555; }
                 default -> { sText = "Idle"; statusColor = 0x888888; }
             }
             guiGraphics.centeredText(font, sText, centerX, startY + 12, statusColor);
@@ -683,13 +683,13 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Open Apepacks folder button
         addRenderableWidget(Button.builder(
-                Component.literal("📂 Open Apepacks Folder"),
+                Component.literal("Open Apepacks Folder"),
                 button -> openApepacksFolder()
         ).bounds(panelX + 20, startY + 10, panelWidth - 40, 20).build());
 
         // Browse and install button
         addRenderableWidget(Button.builder(
-                Component.literal("📥 Browse .apepack"),
+                Component.literal("Browse .apepack"),
                 button -> {
                     ApePackFilePicker filePicker = new ApePackFilePicker(this, selectedPath -> {
                         Path instanceRoot = Path.of(".");
@@ -703,17 +703,17 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Clear processed button
         addRenderableWidget(Button.builder(
-                Component.literal("🗑 Clear Processed"),
+                Component.literal("Clear Processed"),
                 button -> {
                     try {
                         Path processedPath = Path.of("config", "processed_apepacks.json");
                         if (Files.exists(processedPath)) {
                             Files.delete(processedPath);
-                            showToast("✅ Cleared processed .apepack history");
+                            showToast("Cleared processed .apepack history");
                             apepackFiles = scanApepacks();
                         }
                     } catch (Exception e) {
-                        showToast("❌ Failed to clear: " + e.getMessage());
+                        showToast("Failed to clear: " + e.getMessage());
                     }
                 }
         ).bounds(panelX + 20, startY + 66, panelWidth - 40, 20).build());
@@ -778,15 +778,15 @@ public class PackUpdaterConfigScreen extends Screen {
             try {
                 Files.createDirectories(apepacksDir);
             } catch (Exception e) {
-                showToast("❌ Failed to create apepacks folder");
+                showToast("Failed to create apepacks folder");
                 return;
             }
         }
         try {
             java.awt.Desktop.getDesktop().open(apepacksDir.toFile());
-            showToast("📂 Opened apepacks folder");
+            showToast("Opened apepacks folder");
         } catch (Exception e) {
-            showToast("❌ Could not open folder: " + apepacksDir.toAbsolutePath());
+            showToast("Could not open folder: " + apepacksDir.toAbsolutePath());
         }
     }
 
@@ -828,7 +828,7 @@ public class PackUpdaterConfigScreen extends Screen {
             // File name
             String name = info.path.getFileName().toString();
             if (name.length() > 35) name = "..." + name.substring(name.length() - 32);
-            String prefix = info.processed ? "✅ " : "📦 ";
+            String prefix = info.processed ? "[OK] " : "[  ] ";
             guiGraphics.centeredText(font, prefix + name, panelX + 80, y + 3, info.processed ? 0x888888 : 0xFFFFFF);
 
             // Version and size
@@ -878,17 +878,17 @@ public class PackUpdaterConfigScreen extends Screen {
 
         if (packName.isEmpty()) {
             statusText = Component.literal("Please enter a pack name.");
-            showToast("⚠️ Please enter a pack name");
+            showToast("Please enter a pack name");
             return;
         }
         if (packVersion.isEmpty()) {
             statusText = Component.literal("Please enter a pack version.");
-            showToast("⚠️ Please enter a pack version");
+            showToast("Please enter a pack version");
             return;
         }
 
         statusText = Component.literal("Generating .apepack file...");
-        showToast("⏳ Generating .apepack...");
+        showToast("Generating .apepack...");
 
         Thread genThread = new Thread(() -> {
             try {
@@ -904,16 +904,16 @@ public class PackUpdaterConfigScreen extends Screen {
                         statusText = Component.literal(
                                 ".apepack generated! " + result.modCount + " mods, " +
                                 result.configCount + " configs, " + result.scriptCount + " scripts.");
-                        showToast("✅ Generated: " + outputFile.getFileName());
+                        showToast("Generated: " + outputFile.getFileName());
                     } else {
                         statusText = Component.literal("Error: " + result.errorMessage);
-                        showToast("❌ Generation failed");
+                        showToast("Generation failed");
                     }
                 });
             } catch (Exception e) {
                 Minecraft.getInstance().execute(() -> {
                     statusText = Component.literal("Error: " + e.getMessage());
-                    showToast("❌ Error: " + e.getMessage());
+                    showToast("Error: " + e.getMessage());
                 });
             }
         }, "PackUpdater-Generate");
@@ -979,7 +979,7 @@ public class PackUpdaterConfigScreen extends Screen {
                 Component.literal("Save Settings"),
                 button -> {
                     ConfigManager.saveConfig();
-                    showToast("✅ Settings saved");
+                    showToast("Settings saved");
                 }
         ).bounds(panelX + 20, startY + 110, panelWidth - 40, 20).build());
     }
@@ -1041,7 +1041,7 @@ public class PackUpdaterConfigScreen extends Screen {
         guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
 
         // Title
-        guiGraphics.centeredText(this.font, "⚙ Apeiron Pack Updater", this.width / 2, 8, 0x88CCFF);
+        guiGraphics.centeredText(this.font, "Apeiron Pack Updater", this.width / 2, 8, 0x88CCFF);
 
         // Draw active tab highlight
         int tabBarY = 25;

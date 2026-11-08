@@ -785,7 +785,7 @@ public class PackUpdaterMod {
     public static void showUpdateSuccessToast(String packName, String packVersion) {
         // Toast notification will be implemented when the SystemToast API
         // is confirmed for Minecraft 26.1.2
-        System.out.println("[PackUpdater] ✅ " + packName + " v" + packVersion + " installed successfully!");
+        System.out.println("[PackUpdater] " + packName + " v" + packVersion + " installed successfully!");
     }
 
     private void performCleanup() {

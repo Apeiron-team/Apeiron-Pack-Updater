@@ -130,10 +130,10 @@ public class MainMenuNotification extends Screen {
         
         // Title with icon
         String icon = switch (type) {
-            case DOWNLOADING -> "📥";
-            case INSTALLING -> "📦";
-            case COMPLETE -> "✅";
-            case ERROR -> "❌";
+            case DOWNLOADING -> "[↓]";
+            case INSTALLING -> "[•]";
+            case COMPLETE -> "[✓]";
+            case ERROR -> "[✗]";
         };
         
         int titleColor = switch (type) {

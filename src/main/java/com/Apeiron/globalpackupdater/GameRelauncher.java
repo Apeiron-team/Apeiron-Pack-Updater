@@ -218,10 +218,10 @@ public class GameRelauncher {
 
             // Check if the process is still running
             if (process.isAlive()) {
-                System.out.println("[PackUpdater] ✅ Relaunch successful! Exiting current JVM...");
+                System.out.println("[PackUpdater] Relaunch successful! Exiting current JVM...");
                 return true;
             } else {
-                System.err.println("[PackUpdater] ❌ New process exited immediately. Relaunch failed.");
+                System.err.println("[PackUpdater] New process exited immediately. Relaunch failed.");
                 // Try to read any error output
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                     String line;
@@ -571,6 +571,18 @@ public class GameRelauncher {
         String gameDir = instanceRoot.toString().replace("\\", "/");
         String userName = "Player"; // Offline mode username
 
+        // Read the correct assets index from the base Minecraft version JSON
+        String assetsIndex = "30"; // Default for MC 26.1.2
+        try {
+            Path baseJson = INSTALL_DIR.resolve("versions").resolve("26.1.2").resolve("26.1.2.json");
+            if (Files.exists(baseJson)) {
+                JsonObject baseData = parseJson(baseJson);
+                if (baseData.has("assets") && baseData.get("assets").isJsonPrimitive()) {
+                    assetsIndex = baseData.get("assets").getAsString();
+                }
+            }
+        } catch (Exception ignored) {}
+
         return arg
                 .replace("${auth_player_name}", userName)
                 .replace("${auth_session}", "")
@@ -580,7 +592,7 @@ public class GameRelauncher {
                 .replace("${version_type}", "modded")
                 .replace("${game_directory}", gameDir)
                 .replace("${assets_root}", INSTALL_DIR.resolve("assets").toString().replace("\\", "/"))
-                .replace("${assets_index_name}", "unknown")
+                .replace("${assets_index_name}", assetsIndex)
                 .replace("${auth_uuid}", "00000000-0000-0000-0000-000000000000")
                 .replace("${auth_xuid}", "")
                 .replace("${user_properties}", "{}")

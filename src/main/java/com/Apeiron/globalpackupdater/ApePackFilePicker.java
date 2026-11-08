@@ -145,7 +145,7 @@ public class ApePackFilePicker extends Screen {
 
         // Quick access: Home folder
         this.addRenderableWidget(Button.builder(
-                Component.literal("🏠 Home"),
+                Component.literal("Home"),
                 button -> {
                     this.currentDir = new File(System.getProperty("user.home"));
                     this.scrollOffset = 0;
@@ -155,7 +155,7 @@ public class ApePackFilePicker extends Screen {
 
         // Quick access: Downloads folder
         this.addRenderableWidget(Button.builder(
-                Component.literal("📥 Downloads"),
+                Component.literal("Downloads"),
                 button -> {
                     File downloads = new File(System.getProperty("user.home"), "Downloads");
                     if (downloads.exists()) {
@@ -168,7 +168,7 @@ public class ApePackFilePicker extends Screen {
 
         // Quick access: Desktop - try multiple paths
         this.addRenderableWidget(Button.builder(
-                Component.literal("🖥 Desktop"),
+                Component.literal("Desktop"),
                 button -> {
                     // Try multiple Desktop paths
                     File desktop = new File(System.getProperty("user.home"), "Desktop");
@@ -299,7 +299,7 @@ public class ApePackFilePicker extends Screen {
 
             String displayName;
             if (info.isDirectory) {
-                displayName = "📁 " + info.file.getName();
+                displayName = "[DIR] " + info.file.getName();
             } else {
                 displayName = info.file.getName();
             }
