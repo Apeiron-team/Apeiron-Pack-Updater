@@ -182,7 +182,7 @@ The following files are **never** packed or overwritten during installation:
 .\build-and-copy.ps1
 ```
 
-The built JAR will be in `build/libs/packupdater-1.1.8.jar`.
+The built JAR will be in `build/libs/packupdater-1.1.9.jar`.
 
 ## Project Structure
 
