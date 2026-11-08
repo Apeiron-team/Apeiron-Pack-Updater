@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 @Mod("packupdater")
@@ -97,6 +98,12 @@ public class PackUpdaterMod {
 
     public static final DownloadManager downloadManager = new DownloadManager();
 
+    /**
+     * Atomic flag to prevent dual installations - ensures only one .apepack
+     * installation process runs at a time across all entry points.
+     */
+    public static final AtomicBoolean installing = new AtomicBoolean(false);
+
     public PackUpdaterMod(IEventBus modEventBus, ModContainer modContainer) {
         instance = this;
         modEventBus.addListener(this::onClientSetup);
@@ -134,6 +141,12 @@ public class PackUpdaterMod {
 
         // Step 1: Check for GitHub .apepack updates FIRST (before scanning local files)
         Thread updateThread = new Thread(() -> {
+            // Guard: skip if an installation is already in progress
+            if (installing.get()) {
+                System.out.println("[PackUpdater] Skipping startup update check - installation already in progress.");
+                downloadLatch.countDown();
+                return;
+            }
             try {
                 // Show notification on the main menu before starting download
                 Minecraft.getInstance().execute(() -> {
@@ -220,24 +233,31 @@ public class PackUpdaterMod {
                 }
 
                 if (apepackFile != null) {
-                    System.out.println("[PackUpdater] Found unprocessed .apepack: " + apepackFile.getFileName());
-                    // Show the import progress screen on the main thread
-                    final Path finalApepackFile = apepackFile;
-                    Minecraft.getInstance().execute(() -> {
-                        // Close the download notification if it's still open
-                        if (notification[0] != null && Minecraft.getInstance().screen == notification[0]) {
-                            Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
-                        }
-                        ApePackImportScreen importScreen = new ApePackImportScreen(
-                                new net.minecraft.client.gui.screens.TitleScreen(),
-                                finalApepackFile, INSTANCE_ROOT);
-                        Minecraft.getInstance().setScreen(importScreen);
-                        importScreen.startImport();
-                    });
+                    // Guard: prevent dual installation
+                    if (installing.get()) {
+                        System.out.println("[PackUpdater] Skipping .apepack install - installation already in progress.");
+                    } else if (installing.compareAndSet(false, true)) {
+                        System.out.println("[PackUpdater] Found unprocessed .apepack: " + apepackFile.getFileName());
+                        // Show the import progress screen on the main thread
+                        final Path finalApepackFile = apepackFile;
+                        Minecraft.getInstance().execute(() -> {
+                            // Close the download notification if it's still open
+                            if (notification[0] != null && Minecraft.getInstance().screen == notification[0]) {
+                                Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
+                            }
+                            ApePackImportScreen importScreen = new ApePackImportScreen(
+                                    new net.minecraft.client.gui.screens.TitleScreen(),
+                                    finalApepackFile, INSTANCE_ROOT);
+                            Minecraft.getInstance().setScreen(importScreen);
+                            importScreen.startImport();
+                        });
+                    }
                 } else {
                     // No unprocessed .apepack files — run silent scan for any remaining
-                    if (Files.exists(modsDir)) {
+                    if (!installing.get() && Files.exists(modsDir)) {
                         ApePackLoader.scanAndInstall(modsDir);
+                    } else if (installing.get()) {
+                        System.out.println("[PackUpdater] Skipping silent scan - installation already in progress.");
                     }
                     System.out.println("[PackUpdater] No unprocessed .apepack files found.");
                     

@@ -2,10 +2,19 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
-## [0.0.30] - 2026-11-08
+## [0.0.31] - 2026-11-08
 
 ### Fixed
-- **Crash on startup** — Registering a listener on the abstract `RenderGuiLayerEvent` class caused an `IllegalArgumentException`. Fixed by using `RenderGuiLayerEvent.Post` (concrete subclass) instead, which properly fires after GUI layers render
+- **Modpack version not updating after .apepack install** — The import screen's `onFileStart` callback was clearing `packName` and `packVersion` on every file processed, so by the time `onComplete` ran, the version was empty and never saved to the config. The pack version now persists correctly through the entire import process
+- **Dual installations on startup** — Multiple installation threads could run simultaneously, causing the same .apepack to be installed twice. Added an atomic `installing` flag that prevents any new installation from starting while one is already in progress. The flag is reset when the import completes
+- **No way to open config from main menu** — Players had to go through the mods menu to access PackUpdater settings
+
+### Added
+- **PackUpdater button on main menu** — A new "PackUpdater" button appears in the bottom-right corner of the main menu (next to the Minecraft version text), providing quick access to the config screen without navigating through the mods menu
+
+### Changed
+- Startup update check and .apepack scan now check the `installing` flag before proceeding, preventing race conditions between the download thread and scan thread
+- Import screen resets the global `installing` flag when the import completes (success or failure), allowing future installations to proceed normally
 
 ## [0.0.29] - 2026-11-08
 

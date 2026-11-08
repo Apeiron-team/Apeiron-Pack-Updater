@@ -116,8 +116,8 @@ public class ApePackImportScreen extends Screen {
                                     currentFileType = fileType;
                                     filesProcessed = current;
                                     totalFiles = total;
-                                    packName = "Loading...";
-                                    packVersion = "";
+                                    // Do NOT clear packName/packVersion here - they are set by onPackInfo
+                                    // and must persist until onComplete uses them to update the modpack version
                                 });
                             }
 
@@ -180,6 +180,8 @@ public class ApePackImportScreen extends Screen {
                                     } else {
                                         System.err.println("[PackUpdater] ❌ .apepack installation failed: " + error);
                                     }
+                                    // Reset the global installation flag so future installs can proceed
+                                    PackUpdaterMod.installing.set(false);
                                     // Rebuild buttons
                                     clearWidgets();
                                     init();
