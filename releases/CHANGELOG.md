@@ -2,6 +2,21 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.27] - 2026-11-08
+
+### Added
+- **Tabbed config screen** — Complete overhaul of the config screen with 4 clean tabs: Updates, Apepacks, Generate, and Settings. No more cluttered single-page layout
+- **Open Apepacks button** — New button in the Apepacks tab that opens the `apepacks/` folder in your system file explorer for easy access to downloaded .apepack files
+- **Apepacks management tab** — Browse downloaded .apepack files with version and size info, scroll through the list, and clear processed history
+- **Custom tab system** — Built from scratch since TabManager is not available in MC 26.1.2, with active tab highlighting and smooth tab switching
+
+### Changed
+- **Config screen completely redesigned** — Replaced the old 4-section stacked layout with a clean tabbed interface. Each feature area now has its own dedicated tab
+- **Settings moved to dedicated tab** — GitHub repo, token, and channel selection are now in a separate Settings tab, keeping the main Updates tab clean
+- **Generate tab simplified** — Pack name, version, and generate button in a clean, focused layout
+- **Updates tab streamlined** — Pack version display, mod version display, check/download buttons, and download progress bar in one compact view
+- **Field values preserved across tabs** — Text input in all fields is preserved when switching between tabs
+
 ## [0.0.26] - 2026-11-08
 
 ### Added
