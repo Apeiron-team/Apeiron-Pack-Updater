@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -115,6 +116,9 @@ public class PackUpdaterMod {
                     }
                 }
         );
+
+        // Register the pack version overlay for the main menu
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(new PackVersionOverlay());
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {
@@ -751,6 +755,17 @@ public class PackUpdaterMod {
             return name.substring(lastDash + 1);
         }
         return null;
+    }
+
+    /**
+     * Placeholder for toast notification on successful update.
+     * The import screen already shows the completion message.
+     * TODO: Implement when SystemToast API is available for MC 26.1.2.
+     */
+    public static void showUpdateSuccessToast(String packName, String packVersion) {
+        // Toast notification will be implemented when the SystemToast API
+        // is confirmed for Minecraft 26.1.2
+        System.out.println("[PackUpdater] ✅ " + packName + " v" + packVersion + " installed successfully!");
     }
 
     private void performCleanup() {

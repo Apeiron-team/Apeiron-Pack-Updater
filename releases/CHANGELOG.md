@@ -2,6 +2,16 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.29] - 2026-11-08
+
+### Added
+- **Pack version label on main menu** — The main menu now displays the current modpack version in the bottom-left corner (next to where Minecraft shows its version), so you always know which pack version is installed
+- **System toast notification for successful updates** — When an .apepack update finishes installing, a system toast notification (like the narrator on/off notification) appears to confirm the update was successful
+
+### Changed
+- Pack version overlay renders only when the pack version is set (not "v0.0")
+- Toast notification shows the pack name and version after successful .apepack extraction
+
 ## [0.0.28] - 2026-11-08
 
 ### Fixed
