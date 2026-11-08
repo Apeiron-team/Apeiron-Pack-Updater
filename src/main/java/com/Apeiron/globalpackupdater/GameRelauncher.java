@@ -331,9 +331,16 @@ public class GameRelauncher {
             JsonObject arguments = baseData.get("arguments").getAsJsonObject();
             if (arguments.has("jvm") && arguments.get("jvm").isJsonArray()) {
                 for (JsonElement elem : arguments.get("jvm").getAsJsonArray()) {
-                    if (elem.isJsonPrimitive() && elem.getAsString().startsWith("-")) {
-                        String arg = resolveJvmVariable(elem.getAsString(), instanceRoot, neoForgeVersion);
-                        args.add(arg);
+                    if (elem.isJsonPrimitive()) {
+                        String raw = elem.getAsString();
+                        // Skip -cp and ${classpath} entries from the version JSON - we handle classpath ourselves
+                        if (raw.equals("-cp") || raw.equals("-classpath") || raw.equals("${classpath}")) {
+                            continue;
+                        }
+                        if (raw.startsWith("-")) {
+                            String arg = resolveJvmVariable(raw, instanceRoot, neoForgeVersion);
+                            args.add(arg);
+                        }
                     } else if (elem.isJsonObject()) {
                         // JVM args with rules (OS-specific)
                         String arg = resolveJvmArgWithRules(elem.getAsJsonObject(), instanceRoot, neoForgeVersion);
@@ -349,7 +356,12 @@ public class GameRelauncher {
             if (arguments.has("jvm") && arguments.get("jvm").isJsonArray()) {
                 for (JsonElement elem : arguments.get("jvm").getAsJsonArray()) {
                     if (elem.isJsonPrimitive()) {
-                        String arg = resolveJvmVariable(elem.getAsString(), instanceRoot, neoForgeVersion);
+                        String raw = elem.getAsString();
+                        // Skip -cp and ${classpath} entries
+                        if (raw.equals("-cp") || raw.equals("-classpath") || raw.equals("${classpath}")) {
+                            continue;
+                        }
+                        String arg = resolveJvmVariable(raw, instanceRoot, neoForgeVersion);
                         args.add(arg);
                     }
                 }
@@ -401,15 +413,31 @@ public class GameRelauncher {
         // Extract the value
         if (argObj.has("value")) {
             if (argObj.get("value").isJsonArray()) {
-                // Value is an array of strings
+                // Value is an array of strings - filter out -cp and ${classpath}
                 StringBuilder sb = new StringBuilder();
+                boolean skipNext = false;
                 for (JsonElement val : argObj.get("value").getAsJsonArray()) {
+                    String s = val.getAsString();
+                    if (s.equals("-cp") || s.equals("-classpath")) {
+                        skipNext = true;
+                        continue;
+                    }
+                    if (skipNext && s.equals("${classpath}")) {
+                        skipNext = false;
+                        continue;
+                    }
+                    skipNext = false;
                     if (sb.length() > 0) sb.append(" ");
-                    sb.append(resolveJvmVariable(val.getAsString(), instanceRoot, neoForgeVersion));
+                    sb.append(resolveJvmVariable(s, instanceRoot, neoForgeVersion));
                 }
                 return sb.toString();
             } else {
-                return resolveJvmVariable(argObj.get("value").getAsString(), instanceRoot, neoForgeVersion);
+                String val = argObj.get("value").getAsString();
+                // Skip -cp and ${classpath} values
+                if (val.equals("-cp") || val.equals("-classpath") || val.equals("${classpath}")) {
+                    return null;
+                }
+                return resolveJvmVariable(val, instanceRoot, neoForgeVersion);
             }
         }
         return null;
@@ -434,7 +462,10 @@ public class GameRelauncher {
                 .replace("${game_directory}", gameDir)
                 .replace("${natives_directory}", nativesDir)
                 .replace("${version_name}", neoForgeVersion)
-                .replace("${version}", neoForgeVersion);
+                .replace("${version}", neoForgeVersion)
+                .replace("${classpath}", "")
+                .replace("${launcher_name}", "ApeironPackUpdater")
+                .replace("${launcher_version}", "1.0");
     }
 
     /**

@@ -2,6 +2,11 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.35] - 2026-11-08
+
+### Fixed
+- **Game relaunch failed with `-cp requires class path specification`** — The base Minecraft version JSON contained `-cp` and `${classpath}` JVM arguments that conflicted with the classpath we build manually. Now all `-cp`, `-classpath`, and `${classpath}` entries are filtered out from JVM args (both simple and rule-based), and `${classpath}` variable is resolved to empty string in `resolveJvmVariable()`. Added `${launcher_name}` and `${launcher_version}` variable resolution.
+
 ## [0.0.34] - 2026-11-08
 
 ### Fixed
