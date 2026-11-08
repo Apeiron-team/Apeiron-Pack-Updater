@@ -308,10 +308,29 @@ public class PackUpdaterConfigScreen extends Screen {
                 }
         ).bounds(panelX + 20, updatePanelY + 105, panelWidth / 2 - 10, 20).build());
 
-        // Version info button (read-only display)
+        // Check ApePack button - shows installed modpack version and checks for updates
         this.addRenderableWidget(Button.builder(
-                Component.literal("v" + ConfigManager.CURRENT_VERSION),
-                button -> {}
+                Component.literal("📦 Pack: " + ConfigManager.modpackVersion),
+                button -> {
+                    // Check for .apepack updates from GitHub
+                    Thread checkThread = new Thread(() -> {
+                        UpdateCheckResult result = checkForUpdates(ConfigManager.repo, ConfigManager.channel);
+                        Minecraft.getInstance().execute(() -> {
+                            if (result.success && result.updateAvailable) {
+                                showToast("🔄 Pack update available: v" + result.version + " (installed: " + ConfigManager.modpackVersion + ")");
+                                this.statusText = Component.literal("Pack update available: v" + result.version);
+                            } else if (result.success) {
+                                showToast("✅ Pack up to date: " + ConfigManager.modpackVersion);
+                                this.statusText = Component.literal("Pack up to date: " + ConfigManager.modpackVersion);
+                            } else {
+                                showToast("❌ " + result.message);
+                                this.statusText = Component.literal(result.message);
+                            }
+                        });
+                    }, "PackUpdater-PackCheck");
+                    checkThread.setDaemon(true);
+                    checkThread.start();
+                }
         ).bounds(panelX + panelWidth / 2 + 10, updatePanelY + 105, panelWidth / 2 - 10, 20)
                 .build());
 

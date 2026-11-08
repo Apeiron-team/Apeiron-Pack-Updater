@@ -17,6 +17,7 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.*;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -118,6 +119,9 @@ public class PackUpdaterMod {
 
     private void onClientSetup(FMLClientSetupEvent event) {
         performCleanup();
+        
+        // Auto-update PackUpdater JAR in the instance's mods/ folder
+        updatePackUpdaterJar();
 
         // Latch to synchronize: download must complete before scan runs
         final CountDownLatch downloadLatch = new CountDownLatch(1);
@@ -630,6 +634,123 @@ public class PackUpdaterMod {
                         "exit";
 
         Files.writeString(INSTANCE_ROOT.resolve("apply_update.bat"), scriptContent);
+    }
+
+    /**
+     * On startup, finds the currently running PackUpdater JAR and ensures the mods/ folder
+     * contains only the latest version. Removes any older PackUpdater JARs.
+     */
+    private void updatePackUpdaterJar() {
+        try {
+            Path modsDir = INSTANCE_ROOT.resolve("mods");
+            if (!Files.exists(modsDir)) {
+                return;
+            }
+
+            // Find the currently running PackUpdater JAR from the classpath
+            String currentJarName = null;
+            String jarPath = PackUpdaterMod.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            if (jarPath != null) {
+                currentJarName = Paths.get(jarPath).getFileName().toString();
+            }
+
+            if (currentJarName == null || !currentJarName.toLowerCase().startsWith("packupdater")) {
+                System.out.println("[PackUpdater] Could not determine current JAR name, skipping auto-update.");
+                return;
+            }
+
+            System.out.println("[PackUpdater] Current JAR: " + currentJarName);
+
+            // Find all PackUpdater JARs in the mods/ folder
+            List<Path> packUpdaterJars = new ArrayList<>();
+            try (Stream<Path> paths = Files.list(modsDir)) {
+                packUpdaterJars = paths
+                        .filter(p -> p.getFileName().toString().toLowerCase().startsWith("packupdater") && p.getFileName().toString().toLowerCase().endsWith(".jar"))
+                        .toList();
+            }
+
+            if (packUpdaterJars.isEmpty()) {
+                System.out.println("[PackUpdater] No PackUpdater JAR found in mods/, skipping auto-update.");
+                return;
+            }
+
+            // Find the latest version by comparing version numbers
+            Path latestJar = null;
+            String latestVersion = "0";
+            for (Path jar : packUpdaterJars) {
+                String fileName = jar.getFileName().toString();
+                // Extract version from filename like "packupdater-0.0.25.jar"
+                String version = extractVersionFromJarName(fileName);
+                if (version != null && compareVersions(version, latestVersion) > 0) {
+                    latestVersion = version;
+                    latestJar = jar;
+                }
+            }
+
+            if (latestJar == null) {
+                return;
+            }
+
+            System.out.println("[PackUpdater] Latest JAR in mods/: " + latestJar.getFileName() + " (v" + latestVersion + ")");
+
+            // Remove all older PackUpdater JARs
+            for (Path jar : packUpdaterJars) {
+                if (!jar.equals(latestJar)) {
+                    try {
+                        Files.delete(jar);
+                        System.out.println("[PackUpdater] Removed old JAR: " + jar.getFileName());
+                    } catch (IOException e) {
+                        System.err.println("[PackUpdater] Failed to remove old JAR: " + jar.getFileName() + " - " + e.getMessage());
+                    }
+                }
+            }
+
+            // If the latest JAR in mods/ is not the currently running one, copy the current one
+            String latestJarName = latestJar.getFileName().toString();
+            if (!latestJarName.equals(currentJarName)) {
+                // Check if the current JAR is newer
+                String currentVersion = extractVersionFromJarName(currentJarName);
+                if (currentVersion != null && compareVersions(currentVersion, latestVersion) > 0) {
+                    // Copy the current JAR to mods/
+                    Path sourceJar = Paths.get(jarPath);
+                    if (Files.exists(sourceJar)) {
+                        Files.copy(sourceJar, modsDir.resolve(currentJarName), StandardCopyOption.REPLACE_EXISTING);
+                        System.out.println("[PackUpdater] Copied current JAR to mods/: " + currentJarName);
+                        // Remove the old latest JAR
+                        try {
+                            Files.delete(latestJar);
+                            System.out.println("[PackUpdater] Removed outdated JAR: " + latestJarName);
+                        } catch (IOException e) {
+                            System.err.println("[PackUpdater] Failed to remove outdated JAR: " + latestJarName + " - " + e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            System.out.println("[PackUpdater] mods/ folder now contains only: " + latestJar.getFileName());
+
+        } catch (Exception e) {
+            System.err.println("[PackUpdater] Failed to update PackUpdater JAR: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extracts the version string from a PackUpdater JAR filename.
+     * E.g., "packupdater-0.0.25.jar" -> "0.0.25"
+     */
+    private static String extractVersionFromJarName(String fileName) {
+        if (fileName == null) return null;
+        // Remove .jar extension
+        String name = fileName.toLowerCase();
+        if (name.endsWith(".jar")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        // Find the last dash which separates the name from the version
+        int lastDash = name.lastIndexOf('-');
+        if (lastDash > 0) {
+            return name.substring(lastDash + 1);
+        }
+        return null;
     }
 
     private void performCleanup() {

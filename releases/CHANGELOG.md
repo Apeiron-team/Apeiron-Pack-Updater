@@ -2,6 +2,16 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.26] - 2026-11-08
+
+### Added
+- **Check ApePack button** — Replaced the read-only mod version button with a "📦 Pack" button that shows the installed modpack version from config. Clicking it checks GitHub for a newer .apepack release and shows a toast notification with the result
+- **Auto-update PackUpdater JAR** — On startup, the mod now scans the instance's `mods/` folder for all PackUpdater JARs, keeps only the latest version, and removes older ones. If the currently running JAR is newer than what's in `mods/`, it copies itself there
+
+### Changed
+- Config screen now displays the modpack version (from `modpackVersion` in config) instead of the mod version on the right-side button
+- PackUpdater JAR management is fully automatic — no more duplicate or outdated PackUpdater JARs in the mods folder
+
 ## [0.0.25] - 2026-11-08
 
 ### Fixed
