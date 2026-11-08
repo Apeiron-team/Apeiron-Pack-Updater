@@ -3,7 +3,6 @@ package com.Apeiron.globalpackupdater;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -26,7 +25,7 @@ import java.util.stream.Stream;
 @Mod("packupdater")
 public class PackUpdaterMod {
     private static final String CURRENT_VERSION = ConfigManager.CURRENT_VERSION;
-    private static final Path INSTANCE_ROOT = Paths.get(".");
+    private static final Path INSTANCE_ROOT = Paths.get(".").toAbsolutePath().normalize();
     private static PackUpdaterMod instance;
 
     /**
@@ -108,31 +107,68 @@ public class PackUpdaterMod {
                     } else if (installing.compareAndSet(false, true)) {
                         System.out.println("[PackUpdater] Found unprocessed .apepack: " + apepackFile.getFileName());
                         
-                        // Wait for Minecraft to fully load before showing the import screen
-                        try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
-                        
-                        // Show the import progress screen on the main thread
+                        // Extract immediately in the background, then auto-restart — no UI, no user interaction needed
+                        // This ensures only ONE restart is needed: download -> extract+restart -> mods loaded
                         final Path finalApepackFile = apepackFile;
-                        Minecraft.getInstance().execute(() -> {
+                        Thread installThread = new Thread(() -> {
                             try {
-                                Screen currentScreen = Minecraft.getInstance().screen;
-                                // Only show if on title screen or no screen
-                                if (currentScreen instanceof net.minecraft.client.gui.screens.TitleScreen || currentScreen == null) {
-                                    ApePackImportScreen importScreen = new ApePackImportScreen(
-                                        currentScreen != null ? currentScreen : new net.minecraft.client.gui.screens.TitleScreen(),
-                                        finalApepackFile, INSTANCE_ROOT);
-                                    Minecraft.getInstance().setScreen(importScreen);
-                                    importScreen.startImport();
-                                } else {
-                                    // If in-game, install silently in background
-                                    System.out.println("[PackUpdater] Game is in-session, installing silently in background...");
-                                    installSilently(finalApepackFile);
-                                }
+                                // Wait a moment for Minecraft to fully load
+                                try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+                                
+                                System.out.println("[PackUpdater] Auto-extracting .apepack in background...");
+                                ApePackLoaderV2.InstallResult result = ApePackLoaderV2.installApePackWithProgress(
+                                        finalApepackFile, INSTANCE_ROOT,
+                                        new ApePackLoaderV2.ImportProgress() {
+                                            @Override public void onFileStart(String f, String t, int c, int total) {
+                                                System.out.println("[PackUpdater] Installing: " + f + " [" + c + "/" + total + "]");
+                                            }
+                                            @Override public void onFileInstalled(String f) {
+                                                System.out.println("[PackUpdater] Installed: " + f);
+                                            }
+                                            @Override public void onFileSkipped(String f) {
+                                                System.out.println("[PackUpdater] Skipped: " + f);
+                                            }
+                                            @Override public void onFileProtected(String f) {
+                                                System.out.println("[PackUpdater] Protected: " + f);
+                                            }
+                                            @Override public void onPackInfo(String n, String v) {
+                                                ConfigManager.updateModpackName(n);
+                                                System.out.println("[PackUpdater] Pack: " + n + " v" + v);
+                                            }
+                                            @Override public void onComplete(boolean success, String error) {
+                                                if (success) {
+                                                    ApePackLoaderV2.markApePackAsProcessed(finalApepackFile);
+                                                    try {
+                                                        String version = extractApePackVersion(finalApepackFile);
+                                                        if (version != null) ConfigManager.updateModpackVersion(version);
+                                                    } catch (Exception ignored) {}
+                                                    try { Files.deleteIfExists(finalApepackFile); } catch (Exception ignored) {}
+                                                    System.out.println("[PackUpdater] Extraction complete, auto-restarting game...");
+                                                    Minecraft.getInstance().execute(() -> {
+                                                        GameRelauncher.relaunch();
+                                                        System.exit(0);
+                                                    });
+                                                } else {
+                                                    System.err.println("[PackUpdater] Extraction failed: " + error);
+                                                    lastInstallError.set(error);
+                                                    // On failure, show the config screen so the user can see the error
+                                                    Minecraft.getInstance().execute(() -> {
+                                                        if (Minecraft.getInstance().screen instanceof net.minecraft.client.gui.screens.TitleScreen || Minecraft.getInstance().screen == null) {
+                                                            Minecraft.getInstance().setScreen(new PackUpdaterConfigScreen(null));
+                                                        }
+                                                    });
+                                                }
+                                                PackUpdaterMod.installing.set(false);
+                                            }
+                                        });
                             } catch (Exception e) {
-                                System.err.println("[PackUpdater] Failed to show import screen: " + e.getMessage());
-                                installSilently(finalApepackFile);
+                                System.err.println("[PackUpdater] Auto-extract exception: " + e.getMessage());
+                                lastInstallError.set(e.getMessage());
+                                PackUpdaterMod.installing.set(false);
                             }
-                        });
+                        }, "PackUpdater-AutoExtract");
+                        installThread.setDaemon(false);
+                        installThread.start();
                     }
                 } else {
                     System.out.println("[PackUpdater] No unprocessed .apepack files found.");
@@ -181,58 +217,4 @@ public class PackUpdaterMod {
         return INSTANCE_ROOT.resolve("apepacks");
     }
     
-    /**
-     * Installs an .apepack silently in the background (when game is in-session).
-     */
-    private static void installSilently(Path apepackFile) {
-        Thread installThread = new Thread(() -> {
-            try {
-                ApePackLoaderV2.InstallResult result = ApePackLoaderV2.installApePackWithProgress(
-                        apepackFile, INSTANCE_ROOT,
-                        new ApePackLoaderV2.ImportProgress() {
-                            @Override public void onFileStart(String f, String t, int c, int total) {
-                                System.out.println("[PackUpdater] Installing: " + f + " [" + c + "/" + total + "]");
-                            }
-                            @Override public void onFileInstalled(String f) {
-                                System.out.println("[PackUpdater] Installed: " + f);
-                            }
-                            @Override public void onFileSkipped(String f) {
-                                System.out.println("[PackUpdater] Skipped: " + f);
-                            }
-                            @Override public void onFileProtected(String f) {
-                                System.out.println("[PackUpdater] Protected: " + f);
-                            }
-                            @Override public void onPackInfo(String n, String v) {
-                                ConfigManager.updateModpackName(n);
-                                System.out.println("[PackUpdater] Pack: " + n + " v" + v);
-                            }
-                            @Override public void onComplete(boolean success, String error) {
-                                if (success) {
-                                    ApePackLoaderV2.markApePackAsProcessed(apepackFile);
-                                    try {
-                                        String version = extractApePackVersion(apepackFile);
-                                        if (version != null) ConfigManager.updateModpackVersion(version);
-                                    } catch (Exception ignored) {}
-                                    try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
-                                    System.out.println("[PackUpdater] Silent install complete. Restart recommended.");
-                                    Minecraft.getInstance().execute(() -> {
-                                        GameRelauncher.relaunch();
-                                        System.exit(0);
-                                    });
-                                } else {
-                                    System.err.println("[PackUpdater] Silent install failed: " + error);
-                                    lastInstallError.set(error);
-                                }
-                                PackUpdaterMod.installing.set(false);
-                            }
-                        });
-            } catch (Exception e) {
-                System.err.println("[PackUpdater] Silent install exception: " + e.getMessage());
-                lastInstallError.set(e.getMessage());
-                PackUpdaterMod.installing.set(false);
-            }
-        }, "PackUpdater-SilentInstall");
-        installThread.setDaemon(true);
-        installThread.start();
-    }
 }

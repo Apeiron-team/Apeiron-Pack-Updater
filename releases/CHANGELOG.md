@@ -4,6 +4,18 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.2.1] - Startup Extraction Fix - 2026-11-08
+
+### Fixed
+- **3-restart bug** — .apepack files now extract immediately on startup in the background and auto-restart the game in one go. No more import screen on startup, no more waiting for user input. The flow is now: download → extract+restart → mods loaded (2 restarts total instead of 3)
+- **Open Apepacks folder path** — Fixed `instance\.\apepacks` bug by normalizing `INSTANCE_ROOT` to an absolute path at initialization, so all derived paths (including `apepacks/`) resolve correctly
+
+### Changed
+- Removed unused `installSilently()` method — startup extraction now uses the same inline approach
+- Removed unused `Screen` import from PackUpdaterMod
+
+---
+
 ## [1.2.0] - Major Feature Update - 2026-11-08
 
 ### Added
