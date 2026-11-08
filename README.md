@@ -1,12 +1,13 @@
 # Apeiron Pack Updater
 
-> **⚠ DISCLAIMER: ApePack v2 is coming soon.** The next major version will introduce a completely redesigned `.apepack` format with improved performance, better compression, and enhanced features. The current v1 format will remain supported during the transition period.
+> **🎉 ApePack v2 is now live!** Version 1.1.0+ includes XZ/LZMA2 extreme compression (up to 87% smaller files), parallel extraction, archive integrity verification, dependency detection, config conflict resolution, and resource/data pack support. The v1 format remains fully supported for backward compatibility.
 
 A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management with a custom `.apepack` file format for seamless pack updates. Download, verify, and install modpack updates directly from GitHub releases — no launcher required.
 
 ## Features
 
-- **`.apepack` File Format** — Custom ZIP-based archive containing mods, configs, and KubeJS/KubeGroovy scripts with SHA-256 integrity verification
+- **`.apepack` File Format (v2)** — Custom archive with XZ/LZMA2 extreme compression (up to 87% smaller), chunk-based storage, parallel extraction, and SHA-256 integrity verification
+- **`.apepack` v1 Support** — Full backward compatibility with v1 .apepack files
 - **Auto-Extract on Startup** — On game launch, the mod checks for new `.apepack` files in the `apepacks/` folder, extracts them automatically, and restarts the game — no player input required
 - **Smart Mod Updates** — Compares mod versions before installing; only replaces older versions and removes the old JAR files
 - **Config Preservation** — Packs and installs `.toml`, `.json`, `.cfg`, and `.properties` config files while protecting user settings
@@ -15,10 +16,15 @@ A Minecraft mod for **NeoForge 26.1.2** that provides in-game modpack management
 - **Tabbed Config Screen** — Clean, organized config UI with tabs for Apepacks, Generate, and Settings
 - **In-Game File Picker** — Native Minecraft file browser for selecting `.apepack` files with search, navigation, and scrollbar
 - **Import Progress Screen** — Real-time progress bar showing each file being imported with live counts
+- **Real-Time Generation Progress** — Live status updates during .apepack generation (scanning, hashing, compressing)
 - **GitHub Release Integration** — Check for `.apepack` updates from GitHub releases with manual download and progress tracking
-- **In-Game Pack Generation** — Generate `.apepack` files from your current instance with a few clicks
+- **In-Game Pack Generation** — Generate `.apepackv2` files from your current instance with extreme compression
 - **Auto-Restart** — After installing an update, the game automatically restarts with the new mods loaded
 - **Options Menu Button** — Quick access to PackUpdater config from Minecraft's Options menu (Esc → Options)
+- **Config Conflict Resolution** — Choose overwrite, merge, skip, or backup strategies for config files
+- **Resource Pack Support** — Include resource packs in .apepack files
+- **Data Pack Support** — Include data packs in .apepack files
+- **Dependency Detection** — Automatic detection of mod dependencies from metadata
 
 ## Compatibility
 
@@ -53,6 +59,10 @@ The generated file includes:
 - All mods (excluding PackUpdater itself)
 - Config files from `config/`
 - KubeJS/KubeGroovy scripts from `kubejs/` (if present)
+- Resource packs from `resourcepacks/` (if present)
+- Data packs from `datapacks/` (if present)
+
+The file uses **ApePack v2** format with XZ/LZMA2 compression, making it up to 87% smaller than v1 files.
 
 ### Installing an `.apepack` File
 
@@ -70,7 +80,30 @@ The generated file includes:
 
 ## `.apepack` File Format
 
-An `.apepack` file is a ZIP archive with the following structure:
+### ApePack v2 (Current)
+
+An `.apepack` v2 file uses chunk-based storage with XZ/LZMA2 compression:
+
+```
+my-pack.apepack
+├── apepack.json        # Pack metadata (name, version, MC version, formatLabel: "apepackv2")
+├── manifest.json       # File list with SHA-256 hashes, versions, types, and install paths
+├── chunk_001.xz        # XZ-compressed chunk of files
+├── chunk_002.xz        # XZ-compressed chunk of files
+└── ...
+```
+
+**Key improvements over v1:**
+- XZ/LZMA2 preset 9 compression (up to 87% smaller)
+- Chunk-based storage for efficient compression
+- Parallel extraction using thread pools
+- Archive-level integrity verification
+- Config conflict resolution strategies
+- Resource and data pack support
+
+### ApePack v1 (Legacy)
+
+An `.apepack` v1 file is a ZIP archive with the following structure:
 
 ```
 my-pack.apepack
@@ -80,6 +113,8 @@ my-pack.apepack
     ├── mod1.jar
     └── mod2.jar
 ```
+
+The v1 format is fully supported for backward compatibility.
 
 ### `apepack.json`
 
@@ -147,7 +182,7 @@ The following files are **never** packed or overwritten during installation:
 .\build-and-copy.ps1
 ```
 
-The built JAR will be in `build/libs/packupdater-1.0.1.jar`.
+The built JAR will be in `build/libs/packupdater-1.1.8.jar`.
 
 ## Project Structure
 
@@ -165,8 +200,11 @@ packupdater/
     │   ├── PackUpdaterMod.java         # Main mod entry point
     │   ├── ConfigManager.java          # Configuration handling
     │   ├── PackUpdaterConfigScreen.java # Tabbed config GUI screen
-    │   ├── ApePackGenerator.java       # .apepack file generation
-    │   ├── ApePackLoader.java          # .apepack file installation
+    │   ├── ApePackGenerator.java       # .apepack v1 file generation
+    │   ├── ApePackLoader.java          # .apepack v1 file installation
+    │   ├── ApePackGeneratorV2.java     # .apepack v2 file generation (XZ compression)
+    │   ├── ApePackLoaderV2.java        # .apepack v2 file installation (parallel extraction)
+    │   ├── ApePackV2.java              # ApePack v2 format specification
     │   ├── ApePackFilePicker.java      # Native file browser
     │   ├── ApePackImportScreen.java    # Import progress screen
     │   ├── GameRelauncher.java         # Auto-restart after update
