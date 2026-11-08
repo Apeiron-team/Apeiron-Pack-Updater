@@ -505,7 +505,6 @@ public class PackUpdaterConfigScreen extends Screen {
         boolean showProgress = dm.status != PackUpdaterMod.DownloadStatus.IDLE;
         if (showProgress) {
             int panelH = 70;
-            drawPanel(guiGraphics, panelX, startY, panelWidth, panelH);
             
             String sText;
             int statusColor;
@@ -685,8 +684,6 @@ public class PackUpdaterConfigScreen extends Screen {
         int startY = 96;
         int panelHeight = this.height - startY - 30;
 
-        // Panel background
-        drawPanel(guiGraphics, panelX, startY, panelWidth, panelHeight);
         guiGraphics.centeredText(font, "Downloaded .apepack Files", centerX, startY + 10, 0x88CCFF);
 
         if (apepackFiles.isEmpty()) {

@@ -9,6 +9,7 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -62,7 +63,13 @@ public class ApePackFilePicker extends Screen {
         super(Component.literal("Select .apepack File"));
         this.parent = parent;
         this.callback = callback;
-        this.currentDir = new File(System.getProperty("user.home"));
+        // Default to the modpack's apepacks directory
+        Path apepacksDir = PackUpdaterMod.getApepacksDir();
+        if (apepacksDir != null && Files.exists(apepacksDir)) {
+            this.currentDir = apepacksDir.toFile();
+        } else {
+            this.currentDir = new File(System.getProperty("user.home"));
+        }
     }
 
     @Override
@@ -78,6 +85,7 @@ public class ApePackFilePicker extends Screen {
         // Path input field at the top (y=28)
         this.pathField = new EditBox(this.font, centerX - 150, 28, 300, 20, Component.literal("Path"));
         this.pathField.setHint(Component.literal("Browse or type a folder path"));
+        this.pathField.setMaxLength(Integer.MAX_VALUE);
         this.pathField.setValue(this.currentDir.getAbsolutePath());
         this.addRenderableWidget(this.pathField);
 
@@ -100,6 +108,7 @@ public class ApePackFilePicker extends Screen {
         // Search field for filtering files (y=52, next to navigation buttons)
         this.searchField = new EditBox(this.font, centerX - 100, 52, 200, 20, Component.literal("Search"));
         this.searchField.setHint(Component.literal("Filter files by name..."));
+        this.searchField.setMaxLength(Integer.MAX_VALUE);
         this.searchField.setResponder(text -> {
             this.searchQuery = text.toLowerCase();
             this.scrollOffset = 0;

@@ -2,6 +2,17 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.28] - 2026-11-08
+
+### Fixed
+- **File picker defaulted to wrong directory** — The .apepack file browser now opens in the modpack's `apepacks/` folder by default instead of the user's home directory, making it much faster to find downloaded updates
+- **File picker path field character limit** — Removed the default character limit on the path input field and search field in the file browser, allowing long folder paths and file names to be typed without truncation
+- **Empty blue box in Apepacks tab** — Removed all blue panel backgrounds from the config screen (Apepacks tab file list panel and Updates tab download progress panel), replacing them with clean text-only layouts that match the dark background
+
+### Changed
+- File picker falls back to user home directory if the `apepacks/` folder doesn't exist yet
+- Config screen uses a cleaner visual style without boxed panel backgrounds
+
 ## [0.0.27] - 2026-11-08
 
 ### Added
