@@ -65,10 +65,128 @@ public class PackUpdaterMod {
 
     private void onClientSetup(FMLClientSetupEvent event) {
 
-        // Auto-scan for .apepack files on startup and auto-install + auto-restart
+        // Check GitHub for new .apepack2 releases on startup and download if newer
+        java.util.concurrent.CountDownLatch githubCheckDone = new java.util.concurrent.CountDownLatch(1);
+        Thread githubCheckThread = new Thread(() -> {
+            try {
+                System.out.println("[PackUpdater] Checking GitHub for updates...");
+
+                String localVersion = ConfigManager.modpackVersion;
+                if (localVersion == null || localVersion.isEmpty()) {
+                    localVersion = "v0.0";
+                }
+                String localClean = localVersion.replaceFirst("^[vV]", "");
+
+                String apiUrl = "https://api.github.com/repos/" + ConfigManager.repo + "/releases";
+                java.net.URL url = java.net.URI.create(apiUrl).toURL();
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                ConfigManager.setupGitHubConnection(conn);
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(10000);
+
+                if (conn.getResponseCode() != 200) {
+                    System.out.println("[PackUpdater] GitHub API error: " + conn.getResponseCode() + ", skipping update check.");
+                    return;
+                }
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                com.google.gson.JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
+                reader.close();
+
+                if (releases.isEmpty()) {
+                    System.out.println("[PackUpdater] No releases found on GitHub.");
+                    return;
+                }
+
+                String latestApePackVersion = null;
+                String downloadUrl = null;
+                String assetName = null;
+
+                for (com.google.gson.JsonElement element : releases) {
+                    com.google.gson.JsonObject release = element.getAsJsonObject();
+                    String tagName = release.get("tag_name").getAsString();
+                    boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
+
+                    // Match channel
+                    boolean match = false;
+                    if (ConfigManager.channel.equals("stable") && !isPrerelease) match = true;
+                    else if (ConfigManager.channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
+                    else if (ConfigManager.channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
+
+                    if (match && release.has("assets") && release.get("assets").isJsonArray()) {
+                        com.google.gson.JsonArray assets = release.get("assets").getAsJsonArray();
+                        for (com.google.gson.JsonElement assetElem : assets) {
+                            com.google.gson.JsonObject asset = assetElem.getAsJsonObject();
+                            String name = asset.get("name").getAsString();
+                            if (name.toLowerCase().endsWith(".apepack2") || name.toLowerCase().endsWith(".apepack")) {
+                                String apePackVer = extractVersionFromApePackName(name);
+                                if (apePackVer != null) {
+                                    if (latestApePackVersion == null || ApePackLoader.compareVersions(apePackVer, latestApePackVersion) > 0) {
+                                        latestApePackVersion = apePackVer;
+                                        downloadUrl = asset.get("browser_download_url").getAsString();
+                                        assetName = name;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (latestApePackVersion == null) {
+                    System.out.println("[PackUpdater] No .apepack found on GitHub releases.");
+                    return;
+                }
+
+                // Compare versions
+                int versionCompare = ApePackLoader.compareVersions(latestApePackVersion, localClean);
+                System.out.println("[PackUpdater] Local version: " + localClean + ", GitHub version: " + latestApePackVersion + ", compare: " + versionCompare);
+
+                if (versionCompare <= 0) {
+                    System.out.println("[PackUpdater] Pack is up to date (local: " + localClean + ", GitHub: " + latestApePackVersion + ").");
+                    return;
+                }
+
+                System.out.println("[PackUpdater] New update available: " + latestApePackVersion + " (current: " + localClean + "), downloading...");
+
+                // Download the .apepack2 file
+                Path apepacksDir = getApepacksDir();
+                Files.createDirectories(apepacksDir);
+                Path target = apepacksDir.resolve(assetName != null ? assetName : "update.apepack2");
+
+                java.net.URL dlUrl = java.net.URI.create(downloadUrl).toURL();
+                java.net.HttpURLConnection dlConn = (java.net.HttpURLConnection) dlUrl.openConnection();
+                ConfigManager.setupGitHubConnection(dlConn);
+                dlConn.setConnectTimeout(5000);
+                dlConn.setReadTimeout(60000);
+
+                if (dlConn.getResponseCode() != 200) {
+                    System.err.println("[PackUpdater] Failed to download update: HTTP " + dlConn.getResponseCode());
+                    return;
+                }
+
+                try (java.io.InputStream is = dlConn.getInputStream()) {
+                    Files.copy(is, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+
+                System.out.println("[PackUpdater] Downloaded update to: " + target.getFileName() + " (" + Files.size(target) + " bytes)");
+
+            } catch (Exception e) {
+                System.err.println("[PackUpdater] GitHub update check failed: " + e.getMessage());
+            } finally {
+                githubCheckDone.countDown();
+            }
+        }, "PackUpdater-GitHubCheck");
+        githubCheckThread.setDaemon(true);
+        githubCheckThread.start();
+
+        // Wait for GitHub check to finish, then scan for .apepack files
         Thread scanThread = new Thread(() -> {
             try {
-                System.out.println("[PackUpdater] Starting .apepack scan...");
+                // Wait up to 30 seconds for GitHub check to download
+                boolean finished = githubCheckDone.await(30, java.util.concurrent.TimeUnit.SECONDS);
+                System.out.println("[PackUpdater] GitHub check " + (finished ? "completed" : "timed out") + ", starting .apepack scan...");
 
                 // Scan for .apepack files in mods/ and apepacks/ directories
                 Path modsDir = INSTANCE_ROOT.resolve("mods");
@@ -182,6 +300,16 @@ public class PackUpdaterMod {
         }, "PackUpdater-ApePackScan");
         scanThread.setDaemon(true);
         scanThread.start();
+    }
+
+    /**
+     * Extracts the pack version from an .apepack filename (e.g., "V-High-Q-1.1.0.apepack2" -> "1.1.0").
+     */
+    static String extractVersionFromApePackName(String name) {
+        String base = name.toLowerCase().replaceAll("\\.apepack2$", "").replaceAll("\\.apepack$", "");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+[\\.\\-]\\d+(?:[\\.\\-]\\d+)*)$").matcher(base);
+        if (m.find()) return m.group(1).replace("-", ".");
+        return null;
     }
 
     /**

@@ -22,7 +22,7 @@ public class ConfigManager {
     public static long downloadResumeOffset = 0; // Byte offset for resuming
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.2.2";
+    public static final String CURRENT_VERSION = "1.2.3";
 
     public static void loadConfig() {
         try {

@@ -4,6 +4,18 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.2.3] - Fix On-Launch Auto Update Check - 2026-11-09
+
+### Fixed
+- **On-launch auto update check not working** — Added GitHub release check on game startup. The mod now queries the configured GitHub repo for the latest `.apepack2` release, compares it with the installed pack version, and automatically downloads any newer update before scanning for `.apepack` files to extract
+- **Startup flow** — GitHub check thread runs first, then the scan thread waits (up to 30 seconds) for the download to complete before scanning `mods/` and `apepacks/` directories
+
+### Added
+- **`extractVersionFromApePackName()`** helper method in PackUpdaterMod for parsing version from `.apepack2` asset filenames
+- **`CountDownLatch` coordination** between GitHub check and scan threads to ensure proper ordering
+
+---
+
 ## [1.2.2] - Diff Screen Fix & Update Flow Overhaul - 2026-11-09
 
 ### Fixed
