@@ -2,6 +2,13 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.34] - 2026-11-08
+
+### Fixed
+- **Game relaunch failed with macOS/Linux libraries on Windows** — The GameRelauncher now correctly detects the CurseForge Install directory instead of %APPDATA%\.minecraft, filters all libraries by OS-specific rules (57 libraries have platform restrictions), and uses the dynamically detected NeoForge version instead of a hardcoded one. This fixes the `-cp requires class path specification` error and eliminates warnings about missing macOS/Linux native libraries.
+- **Classpath was empty on CurseForge instances** — Libraries are now resolved from the correct CurseForge Install/libraries directory.
+- **Hardcoded NeoForge version** — Client JAR detection now uses the actual detected NeoForge version (e.g., neoforge-26.1.2.126) instead of hardcoded neoforge-26.1.2.122.
+
 ## [0.0.33] - 2026-11-08
 
 ### Added

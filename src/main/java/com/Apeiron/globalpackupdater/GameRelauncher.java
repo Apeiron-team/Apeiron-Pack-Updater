@@ -14,28 +14,85 @@ import java.util.stream.Stream;
  */
 public class GameRelauncher {
 
-    private static final Path MINECRAFT_DIR;
+    /**
+     * The CurseForge Install directory (where libraries and versions are stored).
+     * CurseForge stores at C:\Users\<user>\curseforge\minecraft\Install
+     * Falls back to %APPDATA%\.minecraft for vanilla installations.
+     */
+    private static final Path INSTALL_DIR;
 
     static {
-        // Find the .minecraft directory
-        // The instance root is Paths.get(".") which is the CurseForge instance folder
-        // .minecraft is typically at %APPDATA%\.minecraft or ~/.minecraft
-        Path mcDir = null;
-        String appData = System.getenv("APPDATA");
-        if (appData != null) {
-            Path candidate = Paths.get(appData, ".minecraft");
-            if (Files.exists(candidate)) {
-                mcDir = candidate;
+        Path installDir = null;
+        // Try CurseForge Install directory first
+        String userHome = System.getProperty("user.home");
+        Path curseForgeInstall = Paths.get(userHome, "curseforge", "minecraft", "Install");
+        if (Files.exists(curseForgeInstall.resolve("libraries"))) {
+            installDir = curseForgeInstall;
+        }
+        // Fall back to vanilla .minecraft
+        if (installDir == null) {
+            String appData = System.getenv("APPDATA");
+            if (appData != null) {
+                Path candidate = Paths.get(appData, ".minecraft");
+                if (Files.exists(candidate.resolve("libraries"))) {
+                    installDir = candidate;
+                }
             }
         }
-        if (mcDir == null) {
-            String userHome = System.getProperty("user.home");
+        if (installDir == null) {
             Path candidate = Paths.get(userHome, ".minecraft");
-            if (Files.exists(candidate)) {
-                mcDir = candidate;
+            if (Files.exists(candidate.resolve("libraries"))) {
+                installDir = candidate;
             }
         }
-        MINECRAFT_DIR = mcDir;
+        INSTALL_DIR = installDir;
+    }
+
+    /**
+     * Returns the current OS name for library rule filtering.
+     */
+    private static String getCurrentOsName() {
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.contains("win")) return "windows";
+        if (osName.contains("mac") || osName.contains("osx")) return "osx";
+        if (osName.contains("nix") || osName.contains("nux") || osName.contains("aix")) return "linux";
+        return "unknown";
+    }
+
+    /**
+     * Checks if a library with OS rules should be included for the current OS.
+     */
+    private static boolean libraryAllowedForOs(JsonObject lib) {
+        String currentOs = getCurrentOsName();
+        if (!lib.has("rules") || !lib.get("rules").isJsonArray()) {
+            return true; // No rules = always include
+        }
+        boolean allowed = false;
+        for (JsonElement ruleElem : lib.get("rules").getAsJsonArray()) {
+            JsonObject rule = ruleElem.getAsJsonObject();
+            if (!rule.has("action")) continue;
+            String action = rule.get("action").getAsString();
+            if (rule.has("os") && rule.get("os").isJsonObject()) {
+                JsonObject os = rule.get("os").getAsJsonObject();
+                if (os.has("name")) {
+                    String ruleOs = os.get("name").getAsString();
+                    if (action.equals("allow") && ruleOs.equals(currentOs)) {
+                        allowed = true;
+                    } else if (action.equals("disallow") && ruleOs.equals(currentOs)) {
+                        allowed = false;
+                    }
+                } else {
+                    // No OS specified in rule
+                    if (action.equals("allow")) allowed = true;
+                    else if (action.equals("disallow")) allowed = false;
+                }
+            } else {
+                // No OS object in rule
+                if (action.equals("allow")) allowed = true;
+                else if (action.equals("disallow")) allowed = false;
+            }
+        }
+        return allowed;
     }
 
     /**
@@ -43,13 +100,14 @@ public class GameRelauncher {
      * Returns true if the new process was started successfully.
      */
     public static boolean relaunch() {
-        if (MINECRAFT_DIR == null) {
-            System.err.println("[PackUpdater] Cannot relaunch: .minecraft directory not found.");
+        if (INSTALL_DIR == null) {
+            System.err.println("[PackUpdater] Cannot relaunch: Install directory not found.");
             return false;
         }
 
         try {
             System.out.println("[PackUpdater] Attempting to relaunch Minecraft...");
+            System.out.println("[PackUpdater] Install directory: " + INSTALL_DIR.toAbsolutePath());
 
             // 1. Detect the NeoForge version being used
             String neoForgeVersion = detectNeoForgeVersion();
@@ -60,7 +118,7 @@ public class GameRelauncher {
             System.out.println("[PackUpdater] Detected NeoForge version: " + neoForgeVersion);
 
             // 2. Read the NeoForge version JSON
-            Path neoForgeJson = MINECRAFT_DIR.resolve("versions").resolve(neoForgeVersion).resolve(neoForgeVersion + ".json");
+            Path neoForgeJson = INSTALL_DIR.resolve("versions").resolve(neoForgeVersion).resolve(neoForgeVersion + ".json");
             if (!Files.exists(neoForgeJson)) {
                 System.err.println("[PackUpdater] NeoForge version JSON not found: " + neoForgeJson);
                 return false;
@@ -71,7 +129,7 @@ public class GameRelauncher {
             System.out.println("[PackUpdater] Base Minecraft version: " + baseVersion);
 
             // 3. Read the base Minecraft version JSON
-            Path baseJson = MINECRAFT_DIR.resolve("versions").resolve(baseVersion).resolve(baseVersion + ".json");
+            Path baseJson = INSTALL_DIR.resolve("versions").resolve(baseVersion).resolve(baseVersion + ".json");
             if (!Files.exists(baseJson)) {
                 System.err.println("[PackUpdater] Base version JSON not found: " + baseJson);
                 return false;
@@ -86,8 +144,9 @@ public class GameRelauncher {
             Path nativesDir = instanceRoot.resolve("natives_relaunch_" + System.currentTimeMillis());
             Files.createDirectories(nativesDir);
 
-            // 6. Merge libraries, JVM args, and game args
+            // 6. Merge libraries (filtered by OS), JVM args, and game args
             List<String> allLibraries = mergeLibraries(baseData, neoForgeData);
+            System.out.println("[PackUpdater] Libraries count (after OS filter): " + allLibraries.size());
             setNativesDir(nativesDir);
             List<String> jvmArgs = mergeJvmArgs(baseData, neoForgeData, instanceRoot, neoForgeVersion);
             List<String> gameArgs = mergeGameArgs(baseData, neoForgeData, instanceRoot, neoForgeVersion);
@@ -95,7 +154,12 @@ public class GameRelauncher {
             System.out.println("[PackUpdater] Natives extracted to: " + nativesDir.toAbsolutePath());
 
             // 7. Build classpath
-            String classpath = buildClasspath(allLibraries, instanceRoot);
+            String classpath = buildClasspath(allLibraries, instanceRoot, neoForgeVersion);
+            System.out.println("[PackUpdater] Classpath length: " + classpath.length() + " chars");
+            if (classpath.isEmpty()) {
+                System.err.println("[PackUpdater] ERROR: Classpath is empty! Libraries dir: " + INSTALL_DIR.resolve("libraries"));
+                return false;
+            }
 
             // 8. Get main class
             String mainClass = neoForgeData.has("mainClass") ? neoForgeData.get("mainClass").getAsString() :
@@ -182,7 +246,7 @@ public class GameRelauncher {
      * Looks for the most recent NeoForge version folder.
      */
     private static String detectNeoForgeVersion() {
-        Path versionsDir = MINECRAFT_DIR.resolve("versions");
+        Path versionsDir = INSTALL_DIR.resolve("versions");
         if (!Files.exists(versionsDir)) return null;
 
         String latestVersion = null;
@@ -217,10 +281,11 @@ public class GameRelauncher {
     private static List<String> mergeLibraries(JsonObject baseData, JsonObject neoForgeData) {
         Set<String> libraryPaths = new LinkedHashSet<>();
 
-        // Add base libraries
+        // Add base libraries (filtered by OS rules)
         if (baseData.has("libraries") && baseData.get("libraries").isJsonArray()) {
             for (JsonElement elem : baseData.get("libraries").getAsJsonArray()) {
                 JsonObject lib = elem.getAsJsonObject();
+                if (!libraryAllowedForOs(lib)) continue;
                 if (lib.has("downloads") && lib.get("downloads").isJsonObject()) {
                     JsonObject downloads = lib.get("downloads").getAsJsonObject();
                     if (downloads.has("artifact") && downloads.get("artifact").isJsonObject()) {
@@ -233,10 +298,11 @@ public class GameRelauncher {
             }
         }
 
-        // Add NeoForge libraries (overrides duplicates)
+        // Add NeoForge libraries (filtered by OS rules, overrides duplicates)
         if (neoForgeData.has("libraries") && neoForgeData.get("libraries").isJsonArray()) {
             for (JsonElement elem : neoForgeData.get("libraries").getAsJsonArray()) {
                 JsonObject lib = elem.getAsJsonObject();
+                if (!libraryAllowedForOs(lib)) continue;
                 if (lib.has("downloads") && lib.get("downloads").isJsonObject()) {
                     JsonObject downloads = lib.get("downloads").getAsJsonObject();
                     if (downloads.has("artifact") && downloads.get("artifact").isJsonObject()) {
@@ -359,7 +425,7 @@ public class GameRelauncher {
     private static Path getNativesDir() { return NATIVES_DIR_THREAD.get(); }
 
     private static String resolveJvmVariable(String arg, Path instanceRoot, String neoForgeVersion) {
-        String librariesDir = MINECRAFT_DIR.resolve("libraries").toString().replace("\\", "/");
+        String librariesDir = INSTALL_DIR.resolve("libraries").toString().replace("\\", "/");
         String gameDir = instanceRoot.toString().replace("\\", "/");
         String nativesDir = (getNativesDir() != null) ? getNativesDir().toString().replace("\\", "/") : "";
 
@@ -467,7 +533,7 @@ public class GameRelauncher {
      * Resolves variables in game arguments.
      */
     private static String resolveGameVariable(String arg, Path instanceRoot, String neoForgeVersion) {
-        String librariesDir = MINECRAFT_DIR.resolve("libraries").toString().replace("\\", "/");
+        String librariesDir = INSTALL_DIR.resolve("libraries").toString().replace("\\", "/");
         String gameDir = instanceRoot.toString().replace("\\", "/");
         String userName = "Player"; // Offline mode username
 
@@ -478,7 +544,7 @@ public class GameRelauncher {
                 .replace("${user_type}", "msa")
                 .replace("${version_name}", neoForgeVersion)
                 .replace("${game_directory}", gameDir)
-                .replace("${assets_root}", MINECRAFT_DIR.resolve("assets").toString().replace("\\", "/"))
+                .replace("${assets_root}", INSTALL_DIR.resolve("assets").toString().replace("\\", "/"))
                 .replace("${assets_index_name}", "unknown")
                 .replace("${auth_uuid}", "00000000-0000-0000-0000-000000000000")
                 .replace("${user_properties}", "{}")
@@ -490,9 +556,9 @@ public class GameRelauncher {
     /**
      * Builds the classpath string from the list of library paths.
      */
-    private static String buildClasspath(List<String> libraryPaths, Path instanceRoot) {
+    private static String buildClasspath(List<String> libraryPaths, Path instanceRoot, String neoForgeVersion) {
         StringBuilder sb = new StringBuilder();
-        String librariesDir = MINECRAFT_DIR.resolve("libraries").toString();
+        String librariesDir = INSTALL_DIR.resolve("libraries").toString();
 
         for (String libPath : libraryPaths) {
             Path libFile = Paths.get(librariesDir, libPath);
@@ -504,35 +570,27 @@ public class GameRelauncher {
             }
         }
 
-        // Add the patched client JAR (NeoForge patches the Minecraft client JAR)
-        Path clientJar = MINECRAFT_DIR.resolve("versions").resolve("neoforge-26.1.2.122").resolve("neoforge-26.1.2.122-client.jar");
-        if (Files.exists(clientJar)) {
-            if (sb.length() > 0) sb.append(File.pathSeparator);
-            sb.append(clientJar.toString());
-        }
-
-        // Also try to find the client JAR by scanning versions
-        if (!Files.exists(clientJar)) {
-            Path versionsDir = MINECRAFT_DIR.resolve("versions");
-            if (Files.exists(versionsDir)) {
-                try (Stream<Path> paths = Files.list(versionsDir)) {
-                    for (Path dir : paths.toArray(Path[]::new)) {
-                        if (Files.isDirectory(dir)) {
-                            String name = dir.getFileName().toString();
-                            if (name.toLowerCase().startsWith("neoforge")) {
-                                Path patchedJar = dir.resolve(name + "-client.jar");
-                                if (Files.exists(patchedJar)) {
-                                    if (sb.length() > 0) sb.append(File.pathSeparator);
-                                    sb.append(patchedJar.toString());
-                                    System.out.println("[PackUpdater] Found patched client JAR: " + patchedJar);
-                                    break;
-                                }
+        // Add the patched client JAR if it exists (for vanilla NeoForge installs)
+        // CurseForge/FancyModLoader doesn't use a patched client JAR, so this is optional
+        Path versionsDir = INSTALL_DIR.resolve("versions");
+        if (Files.exists(versionsDir)) {
+            try (Stream<Path> paths = Files.list(versionsDir)) {
+                for (Path dir : paths.toArray(Path[]::new)) {
+                    if (Files.isDirectory(dir)) {
+                        String name = dir.getFileName().toString();
+                        if (name.equals(neoForgeVersion)) {
+                            Path patchedJar = dir.resolve(name + "-client.jar");
+                            if (Files.exists(patchedJar)) {
+                                if (sb.length() > 0) sb.append(File.pathSeparator);
+                                sb.append(patchedJar.toString());
+                                System.out.println("[PackUpdater] Found patched client JAR: " + patchedJar);
                             }
+                            break;
                         }
                     }
-                } catch (IOException e) {
-                    // Ignore
                 }
+            } catch (IOException e) {
+                // Ignore
             }
         }
 
@@ -543,7 +601,7 @@ public class GameRelauncher {
      * Extracts native libraries to the specified directory.
      */
     private static void extractNatives(List<String> libraryPaths, Path nativesDir) {
-        String librariesDir = MINECRAFT_DIR.resolve("libraries").toString();
+        String librariesDir = INSTALL_DIR.resolve("libraries").toString();
 
         for (String libPath : libraryPaths) {
             Path libFile = Paths.get(librariesDir, libPath);
