@@ -272,7 +272,17 @@ public class PackUpdaterConfigScreen extends Screen {
         }
     }
 
+    /**
+     * Checks for mod updates — compares GitHub release tags against the installed mod version.
+     */
     private UpdateCheckResult checkForUpdates(String repo, String channel) {
+        return checkForModUpdates(repo, channel);
+    }
+
+    /**
+     * Checks for mod updates — compares GitHub release tags against the installed mod version.
+     */
+    private UpdateCheckResult checkForModUpdates(String repo, String channel) {
         try {
             String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
             URL url = URI.create(apiUrl).toURL();
@@ -310,6 +320,109 @@ public class PackUpdaterConfigScreen extends Screen {
         } catch (Exception e) {
             return new UpdateCheckResult(false, "Error: " + e.getMessage(), null, false);
         }
+    }
+
+    /**
+     * Checks for pack (.apepack) updates — compares the .apepack version from GitHub release
+     * assets against the installed modpack version. Falls back to the release tag if no
+     * .apepack asset is found.
+     */
+    private UpdateCheckResult checkForPackUpdates(String repo, String channel) {
+        String localVersion = ConfigManager.modpackVersion;
+        if (localVersion == null || localVersion.isEmpty()) {
+            localVersion = "v0.0";
+        }
+        // Strip leading 'v' or 'V' for comparison
+        String localClean = localVersion.replaceFirst("^[vV]", "");
+
+        try {
+            String apiUrl = "https://api.github.com/repos/" + repo + "/releases";
+            URL url = URI.create(apiUrl).toURL();
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            ConfigManager.setupGitHubConnection(conn);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(10000);
+            if (conn.getResponseCode() != 200) {
+                String errorMsg = "GitHub API error: " + conn.getResponseCode();
+                if (conn.getResponseCode() == 403) {
+                    errorMsg = "Rate limit exceeded. Add a GitHub token in Settings.";
+                }
+                return new UpdateCheckResult(false, errorMsg, null, false);
+            }
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
+            reader.close();
+            if (releases.isEmpty()) return new UpdateCheckResult(false, "No releases found", null, false);
+
+            // Track the highest .apepack version found across all matching releases
+            String latestApePackVersion = null;
+            String latestReleaseTag = null;
+
+            for (JsonElement element : releases) {
+                JsonObject release = element.getAsJsonObject();
+                String tagName = release.get("tag_name").getAsString();
+                boolean isPrerelease = release.has("prerelease") && release.get("prerelease").getAsBoolean();
+                boolean match = false;
+                if (channel.equals("stable") && !isPrerelease) match = true;
+                else if (channel.equals("beta") && isPrerelease && tagName.toLowerCase().contains("beta")) match = true;
+                else if (channel.equals("nightly") && isPrerelease && (tagName.toLowerCase().contains("nightly") || tagName.toLowerCase().contains("dev"))) match = true;
+
+                if (match) {
+                    // Check for .apepack assets in this release
+                    if (release.has("assets") && release.get("assets").isJsonArray()) {
+                        JsonArray assets = release.get("assets").getAsJsonArray();
+                        for (JsonElement assetElem : assets) {
+                            JsonObject asset = assetElem.getAsJsonObject();
+                            String name = asset.get("name").getAsString();
+                            if (name.toLowerCase().endsWith(".apepack")) {
+                                // Extract version from the .apepack filename
+                                // Format: "packname-X.Y.Z.apepack" or "update-YYYY-MM-DD.apepack"
+                                String apePackVer = extractVersionFromApePackName(name);
+                                if (apePackVer != null) {
+                                    if (latestApePackVersion == null || compareVersions(apePackVer, latestApePackVersion) > 0) {
+                                        latestApePackVersion = apePackVer;
+                                        latestReleaseTag = tagName;
+                                    }
+                                }
+                                break; // Use first .apepack found in this release
+                            }
+                        }
+                    }
+                    // Do NOT fall back to mod release tag — that would compare mod versions
+                    // against pack versions, causing false "update available" notifications.
+                    // Only use .apepack asset versions for pack checks.
+                }
+            }
+
+            if (latestApePackVersion == null) {
+                // No .apepack assets on GitHub — the installed pack is the latest
+                System.out.println("[PackUpdater] Pack check: no .apepack on GitHub, local=" + localClean + " (up to date)");
+                return new UpdateCheckResult(true, "No .apepack on GitHub", localClean, false);
+            }
+
+            boolean isNewer = compareVersions(latestApePackVersion, localClean) > 0;
+            System.out.println("[PackUpdater] Pack check: GitHub=" + latestApePackVersion + ", local=" + localClean + ", isNewer=" + isNewer);
+            return new UpdateCheckResult(true, "Latest: " + (latestReleaseTag != null ? latestReleaseTag : latestApePackVersion), latestApePackVersion, isNewer);
+
+        } catch (Exception e) {
+            return new UpdateCheckResult(false, "Error: " + e.getMessage(), null, false);
+        }
+    }
+
+    /**
+     * Extracts version from an .apepack filename like "V-High-Q-1.1.0.apepack" → "1.1.0"
+     * or "update-2026-11-08.apepack" → null (date-based names have no version).
+     */
+    private String extractVersionFromApePackName(String name) {
+        // Remove .apepack extension
+        String base = name.toLowerCase().replaceAll("\\.apepack$", "");
+        // Try to find a version pattern (X.Y.Z or X.Y) at the end
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+[\\.\\-]\\d+(?:[\\.\\-]\\d+)*)$").matcher(base);
+        if (m.find()) {
+            return m.group(1).replace("-", ".");
+        }
+        return null;
     }
 
     private void checkAvailableChannels() {
@@ -363,19 +476,19 @@ public class PackUpdaterConfigScreen extends Screen {
         int panelX = centerX - panelWidth / 2;
         int startY = 55;
 
-        // Pack version display
+        // Pack version display — checks for .apepack pack updates, NOT mod updates
         addRenderableWidget(Button.builder(
                 Component.literal("📦 Pack: " + ConfigManager.modpackVersion),
                 button -> {
                     Thread checkThread = new Thread(() -> {
-                        UpdateCheckResult result = checkForUpdates(ConfigManager.repo, ConfigManager.channel);
+                        UpdateCheckResult result = checkForPackUpdates(ConfigManager.repo, ConfigManager.channel);
                         Minecraft.getInstance().execute(() -> {
                             if (result.success && result.updateAvailable) {
                                 showToast("🔄 Pack update: v" + result.version + " (installed: " + ConfigManager.modpackVersion + ")");
                                 statusText = Component.literal("Pack update available: v" + result.version);
                             } else if (result.success) {
                                 showToast("✅ Pack up to date: " + ConfigManager.modpackVersion);
-                                statusText = Component.literal("Pack up to date");
+                                statusText = Component.literal("Pack up to date: " + ConfigManager.modpackVersion);
                             } else {
                                 showToast("❌ " + result.message);
                                 statusText = Component.literal(result.message);

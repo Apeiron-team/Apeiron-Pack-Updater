@@ -2,6 +2,16 @@
 
 All notable changes to the Apeiron PackUpdater mod will be documented in this file.
 
+## [0.0.32] - 2026-11-08
+
+### Fixed
+- **Pack button showed "update available" even when on same version** — The "📦 Pack" button was using the same update check method as the "Check for Update" button, which compared GitHub mod release tags (v0.0.31) against the mod version (0.0.31) instead of comparing .apepack pack versions against the installed modpack version (v1.1.0). The pack button now has its own `checkForPackUpdates()` method that only looks for .apepack assets in GitHub releases and compares them against `ConfigManager.modpackVersion`. When no .apepack is found on GitHub, it correctly reports "up to date" instead of falling back to mod version comparison.
+
+### Changed
+- Pack update check no longer falls back to mod release tags when no .apepack asset is found — this prevents false "update available" notifications caused by comparing mod versions (0.0.31) against pack versions (1.1.0)
+- Added debug logging to pack update check so version comparisons are visible in `latest.log`
+- "✅ Pack up to date" toast now shows the installed pack version for clarity
+
 ## [0.0.31] - 2026-11-08
 
 ### Fixed
