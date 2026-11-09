@@ -8,6 +8,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -38,6 +39,22 @@ public class PackUpdaterMod {
      * Last installation error message for the config screen to display.
      */
     public static final AtomicReference<String> lastInstallError = new AtomicReference<>(null);
+    
+    /**
+     * Pending .apepack file path for the splash screen.
+     * Set when an update is found, cleared after the splash screen handles it.
+     */
+    public static final AtomicReference<Path> pendingApepackFile = new AtomicReference<>(null);
+    
+    /**
+     * Changelog text for the latest release, fetched from GitHub.
+     */
+    public static final AtomicReference<String> latestChangelog = new AtomicReference<>("");
+    
+    /**
+     * New version string found on GitHub.
+     */
+    public static final AtomicReference<String> latestVersion = new AtomicReference<>("");
 
     public PackUpdaterMod(IEventBus modEventBus, ModContainer modContainer) {
         instance = this;
@@ -61,6 +78,9 @@ public class PackUpdaterMod {
 
         // Register the options menu button
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(new OptionsMenuButton());
+        
+        // Register the splash screen interceptor
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(new UpdateSplashScreenInterceptor());
     }
 
     private void onClientSetup(FMLClientSetupEvent event) {
@@ -102,6 +122,7 @@ public class PackUpdaterMod {
                 String latestApePackVersion = null;
                 String downloadUrl = null;
                 String assetName = null;
+                com.google.gson.JsonObject latestRelease = null;
 
                 for (com.google.gson.JsonElement element : releases) {
                     com.google.gson.JsonObject release = element.getAsJsonObject();
@@ -126,6 +147,7 @@ public class PackUpdaterMod {
                                         latestApePackVersion = apePackVer;
                                         downloadUrl = asset.get("browser_download_url").getAsString();
                                         assetName = name;
+                                        latestRelease = release;
                                     }
                                 }
                                 break;
@@ -149,6 +171,16 @@ public class PackUpdaterMod {
                 }
 
                 System.out.println("[PackUpdater] New update available: " + latestApePackVersion + " (current: " + localClean + "), downloading...");
+                
+                // Store the new version for the splash screen
+                latestVersion.set(latestApePackVersion);
+                
+                // Fetch changelog from the release
+                String releaseNotes = "";
+                if (latestRelease != null && latestRelease.has("body")) {
+                    releaseNotes = latestRelease.get("body").getAsString();
+                }
+                latestChangelog.set(releaseNotes);
 
                 // Download the .apepack2 file
                 Path apepacksDir = getApepacksDir();
@@ -171,6 +203,9 @@ public class PackUpdaterMod {
                 }
 
                 System.out.println("[PackUpdater] Downloaded update to: " + target.getFileName() + " (" + Files.size(target) + " bytes)");
+                
+                // Set the pending .apepack file for the splash screen
+                pendingApepackFile.set(target);
 
             } catch (Exception e) {
                 System.err.println("[PackUpdater] GitHub update check failed: " + e.getMessage());
@@ -219,8 +254,12 @@ public class PackUpdaterMod {
                 }
 
                 if (apepackFile != null) {
-                    // Guard: prevent dual installation
-                    if (installing.get()) {
+                    // If this is the same file we just downloaded, let the splash screen handle it
+                    Path pending = pendingApepackFile.get();
+                    if (pending != null && pending.equals(apepackFile)) {
+                        System.out.println("[PackUpdater] Found downloaded .apepack: " + apepackFile.getFileName() + " — splash screen will handle installation.");
+                        // Don't auto-extract; the splash screen will show when the main menu opens
+                    } else if (installing.get()) {
                         System.out.println("[PackUpdater] Skipping .apepack install - installation already in progress.");
                     } else if (installing.compareAndSet(false, true)) {
                         System.out.println("[PackUpdater] Found unprocessed .apepack: " + apepackFile.getFileName());

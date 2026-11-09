@@ -4,6 +4,22 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
+## [1.2.4] - Pre-Main Menu Update Splash Screen - 2026-11-10
+
+### Added
+- **Update splash screen** — Custom pre-main-menu screen that appears when an update is available. Intercepts the vanilla TitleScreen and shows version info, changelog summary, and "Install Update" / "Skip for Now" buttons
+- **UpdateSplashScreen.java** — Full-screen update notification with installation progress bar, file counts (new/skipped/protected), and real-time feedback
+- **UpdateSplashScreenInterceptor.java** — NeoForge ScreenEvent.Opening hook that replaces the main menu with the splash screen when a pending .apepack2 file exists
+- **Changelog display** — Fetches release notes from GitHub and displays them on the splash screen so players know what's changing before installing
+- **Skip protection** — Once a user skips an update, the splash screen won't show again for that .apepack file
+
+### Changed
+- **Startup flow** — When the mod downloads an update from GitHub, it now stores the .apepack file path, changelog, and version for the splash screen instead of auto-extracting immediately
+- **Scan thread** — Skips auto-extraction for downloaded .apepack files, letting the splash screen handle installation
+- **Pending update tracking** — Added `pendingApepackFile`, `latestChangelog`, and `latestVersion` atomic references in PackUpdaterMod for splash screen data sharing
+
+---
+
 ## [1.2.3] - Fix On-Launch Auto Update Check - 2026-11-09
 
 ### Fixed
