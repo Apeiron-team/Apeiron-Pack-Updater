@@ -4,7 +4,57 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 
 ---
 
-## [1.2.4] - Pre-Main Menu Update Splash Screen - 2026-11-10
+
+## [1.3.1] - Dead Code Cleanup - 2026-11-10
+
+### Removed
+- **ApePackGenerator.java** (499 lines) — v1 generator, fully replaced by ApePackGeneratorV2
+- **ApePackImportScreen.java** (424 lines) — never instantiated; preload flow auto-restarts, config screen uses diff screen
+- **UpdateSplashScreen.java** (~200 lines) — splash screen replaced by preload flow in v1.2.7
+- **UpdateSplashScreenInterceptor.java** (~50 lines) — interceptor for removed splash screen
+- **Unused fields** — Removed `pendingApepackFile`, `latestChangelog`, `latestVersion` from PackUpdaterMod
+- **Unused config fields** — Removed `lastReleaseUrl`, `downloadResumeUrl`, `downloadResumeOffset` from ConfigManager
+- **Unused methods** — Removed `scanAndInstall()` from ApePackLoader and ApePackLoaderV2
+- **Deprecated constants** — Removed `COMPRESSION_ZSTD`, `ZSTD_COMPRESSION_LEVEL`, `GZIP_COMPRESSION_LEVEL` from ApePackV2
+- **Unused helpers** — Removed `getFileName()`, `formatSize()` from ApePackFilePicker
+
+### Notes
+- Net reduction: ~1,850 lines of dead code removed
+- All active features preserved: ApePack v2 generation/loading, preload auto-update, diff screen, file picker, game relauncher, options menu button
+
+---
+
+## [1.3.0] - Auto-Restart After Update - 2026-11-10
+
+### Changed
+- **Automatic restart after extraction** — The preload update flow now automatically restarts the game after extracting an .apepack2 file. No more diff screen on startup, no more manual "Restart to Apply" click. The entire update is fully automatic: check GitHub → download → extract → restart → new mods load
+- **Startup flow** — When the mod finds a newer .apepack2 on GitHub, it downloads, extracts, cleans up the .apepack file, and restarts the game without any user interaction
+- **Diff screen preserved for manual installs** — The comparison screen still works when manually browsing and installing an .apepack2 file from the config screen
+
+### Fixed
+- **Restart sequence** — Game now properly restarts after extraction during preload using `GameRelauncher.relaunch()` with a short delay to let FML finish initializing
+
+---
+
+## [1.2.7] - Preload Update Sequence - 2026-11-10
+
+### Changed
+- **Entire update flow runs during FML preload** — Replaced async background threads with `event.enqueueWork()` in `FMLClientSetupEvent`. The mod now checks GitHub, downloads the .apepack2, and extracts it all during NeoForge's preloading sequence with the FML progress bar visible
+- **Simplified startup flow** — Single synchronous task: Check GitHub → Download if newer → Extract → Show diff screen. No more CountDownLatch coordination between threads
+- **Removed UpdateSplashScreenInterceptor** — No longer needed since the entire update happens during preload before the main menu appears
+- **Diff screen after preload** — After extraction completes during preload, the diff screen is scheduled to open via `Minecraft.getInstance().execute()` so the player can review changes before restarting
+
+### Fixed
+- **Diff screen file handling** — ApePackDiffScreen now handles the case where the .apepack file was already deleted (uses config version as fallback)
+- **Back to Main Menu button** — Only tries to delete the .apepack if it still exists, preventing errors when the file was already cleaned up
+
+### Removed
+- **UpdateSplashScreenInterceptor.java** — Replaced by the preload-based approach
+- **Async background threads** — All update logic now runs synchronously during FML preload
+
+---
+
+## [1.2.6] - Preload Update Check - 2026-11-10
 
 ### Added
 - **Update splash screen** — Custom pre-main-menu screen that appears when an update is available. Intercepts the vanilla TitleScreen and shows version info, changelog summary, and "Install Update" / "Skip for Now" buttons

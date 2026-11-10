@@ -524,19 +524,5 @@ public class ApePackFilePicker extends Screen {
         }
     }
 
-    private String getFileName(File file) {
-        String name = file.getName();
-        if (name.length() > 40) {
-            name = "..." + name.substring(name.length() - 37);
-        }
-        return name;
-    }
-
-    private String formatSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024) + " KB";
-        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)) + " MB";
-        return (bytes / (1024 * 1024 * 1024)) + " GB";
-    }
 }
 

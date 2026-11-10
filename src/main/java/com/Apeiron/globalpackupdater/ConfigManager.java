@@ -12,17 +12,12 @@ public class ConfigManager {
 
     public static String repo = "Apeiron-team/Apeiron-Vanilla-plus-v1"; // Default to the modpack repo
     public static String channel = "stable"; // stable, beta, nightly
-    public static String lastReleaseUrl = null;
     public static String modpackVersion = "v0.0"; // Default modpack version
     public static String modpackName = ""; // Modpack name (set from .apepack)
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
     
-    // Download state for pause/resume
-    public static String downloadResumeUrl = ""; // URL to resume download from
-    public static long downloadResumeOffset = 0; // Byte offset for resuming
-    
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.2.4";
+    public static final String CURRENT_VERSION = "1.3.1";
 
     public static void loadConfig() {
         try {
@@ -31,12 +26,9 @@ public class ConfigManager {
                 JsonObject json = JsonParser.parseString(content).getAsJsonObject();
                 if (json.has("repo")) repo = json.get("repo").getAsString();
                 if (json.has("channel")) channel = json.get("channel").getAsString();
-                if (json.has("lastReleaseUrl")) lastReleaseUrl = json.get("lastReleaseUrl").getAsString();
                 if (json.has("modpackVersion")) modpackVersion = json.get("modpackVersion").getAsString();
                 if (json.has("modpackName")) modpackName = json.get("modpackName").getAsString();
                 if (json.has("githubToken")) githubToken = json.get("githubToken").getAsString();
-                if (json.has("downloadResumeUrl")) downloadResumeUrl = json.get("downloadResumeUrl").getAsString();
-                if (json.has("downloadResumeOffset")) downloadResumeOffset = json.get("downloadResumeOffset").getAsLong();
             } else {
                 saveConfig();
             }
@@ -51,21 +43,12 @@ public class ConfigManager {
             JsonObject json = new JsonObject();
             json.addProperty("repo", repo);
             json.addProperty("channel", channel);
-            if (lastReleaseUrl != null) {
-                json.addProperty("lastReleaseUrl", lastReleaseUrl);
-            }
             json.addProperty("modpackVersion", modpackVersion);
             if (!modpackName.isEmpty()) {
                 json.addProperty("modpackName", modpackName);
             }
             if (!githubToken.isEmpty()) {
                 json.addProperty("githubToken", githubToken);
-            }
-            if (!downloadResumeUrl.isEmpty()) {
-                json.addProperty("downloadResumeUrl", downloadResumeUrl);
-            }
-            if (downloadResumeOffset > 0) {
-                json.addProperty("downloadResumeOffset", downloadResumeOffset);
             }
             Files.writeString(CONFIG_PATH, json.toString());
         } catch (Exception e) {

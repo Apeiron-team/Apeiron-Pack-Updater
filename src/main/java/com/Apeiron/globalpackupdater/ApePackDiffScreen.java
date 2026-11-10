@@ -80,63 +80,69 @@ public class ApePackDiffScreen extends Screen {
         // Get new mods from the .apepack
         Set<String> newModNames = new HashSet<>();
         Map<String, String> newModVersions = new HashMap<>();
-        try {
-            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(apepackFile.toFile());
-            
-            // Read apepack.json for version
-            var apepackEntry = zipFile.getEntry("apepack.json");
-            if (apepackEntry != null) {
-                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(zipFile.getInputStream(apepackEntry)))) {
-                    String content = reader.lines().collect(Collectors.joining("\n"));
-                    com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
-                    if (json.has("packVersion")) {
-                        newPackVersion = json.get("packVersion").getAsString();
+        if (Files.exists(apepackFile)) {
+            try {
+                java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(apepackFile.toFile());
+                
+                // Read apepack.json for version
+                var apepackEntry = zipFile.getEntry("apepack.json");
+                if (apepackEntry != null) {
+                    try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(zipFile.getInputStream(apepackEntry)))) {
+                        String content = reader.lines().collect(Collectors.joining("\n"));
+                        com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
+                        if (json.has("packVersion")) {
+                            newPackVersion = json.get("packVersion").getAsString();
+                        }
                     }
                 }
-            }
-            
-            // Read manifest.json for file list
-            var manifestEntry = zipFile.getEntry("manifest.json");
-            if (manifestEntry != null) {
-                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(zipFile.getInputStream(manifestEntry)))) {
-                    String content = reader.lines().collect(Collectors.joining("\n"));
-                    com.google.gson.JsonObject manifest = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
-                    
-                    // Try new format first
-                    if (manifest.has("files") && manifest.get("files").isJsonArray()) {
-                        for (var elem : manifest.get("files").getAsJsonArray()) {
-                            com.google.gson.JsonObject file = elem.getAsJsonObject();
-                            String type = file.has("type") ? file.get("type").getAsString() : "mod";
-                            String name = file.has("name") ? file.get("name").getAsString() : "";
-                            String version = file.has("version") ? file.get("version").getAsString() : "";
-                            
-                            if ("mod".equals(type)) {
-                                String baseName = ApePackLoader.extractModBaseName(name).toLowerCase();
-                                newModNames.add(baseName);
-                                newModVersions.put(baseName, name);
-                            } else if ("config".equals(type)) {
-                                // Check if config exists
-                                String installPath = file.has("installPath") ? file.get("installPath").getAsString() : "";
-                                Path configPath = instanceRoot.resolve(installPath);
-                                if (Files.exists(configPath)) {
-                                    String existingHash = ApePackLoader.computeSha256(configPath);
-                                    String newHash = file.has("sha256") ? file.get("sha256").getAsString() : "";
-                                    if (existingHash != null && existingHash.equalsIgnoreCase(newHash)) {
-                                        // unchanged
+                
+                // Read manifest.json for file list
+                var manifestEntry = zipFile.getEntry("manifest.json");
+                if (manifestEntry != null) {
+                    try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(zipFile.getInputStream(manifestEntry)))) {
+                        String content = reader.lines().collect(Collectors.joining("\n"));
+                        com.google.gson.JsonObject manifest = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
+                        
+                        // Try new format first
+                        if (manifest.has("files") && manifest.get("files").isJsonArray()) {
+                            for (var elem : manifest.get("files").getAsJsonArray()) {
+                                com.google.gson.JsonObject file = elem.getAsJsonObject();
+                                String type = file.has("type") ? file.get("type").getAsString() : "mod";
+                                String name = file.has("name") ? file.get("name").getAsString() : "";
+                                String version = file.has("version") ? file.get("version").getAsString() : "";
+                                
+                                if ("mod".equals(type)) {
+                                    String baseName = ApePackLoader.extractModBaseName(name).toLowerCase();
+                                    newModNames.add(baseName);
+                                    newModVersions.put(baseName, name);
+                                } else if ("config".equals(type)) {
+                                    // Check if config exists
+                                    String installPath = file.has("installPath") ? file.get("installPath").getAsString() : "";
+                                    Path configPath = instanceRoot.resolve(installPath);
+                                    if (Files.exists(configPath)) {
+                                        String existingHash = ApePackLoader.computeSha256(configPath);
+                                        String newHash = file.has("sha256") ? file.get("sha256").getAsString() : "";
+                                        if (existingHash != null && existingHash.equalsIgnoreCase(newHash)) {
+                                            // unchanged
+                                        } else {
+                                            updatedConfigs.add(name);
+                                        }
                                     } else {
-                                        updatedConfigs.add(name);
+                                        addedConfigs.add(name);
                                     }
-                                } else {
-                                    addedConfigs.add(name);
                                 }
                             }
                         }
                     }
                 }
+                zipFile.close();
+            } catch (Exception e) {
+                System.err.println("[PackUpdater] Failed to compute diff: " + e.getMessage());
             }
-            zipFile.close();
-        } catch (Exception e) {
-            System.err.println("[PackUpdater] Failed to compute diff: " + e.getMessage());
+        } else {
+            // .apepack file was already deleted - use the new pack version from config
+            newPackVersion = ConfigManager.modpackVersion;
+            System.out.println("[PackUpdater] .apepack file not found for diff, using config version: " + newPackVersion);
         }
         
         // Compute differences
@@ -236,9 +242,11 @@ public class ApePackDiffScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("Back to Main Menu"),
                 b -> {
-                    // Clean up the .apepack file
-                    try { ApePackLoaderV2.markApePackAsProcessed(apepackFile); } catch (Exception ignored) {}
-                    try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
+                    // Clean up the .apepack file if it still exists
+                    if (Files.exists(apepackFile)) {
+                        try { ApePackLoaderV2.markApePackAsProcessed(apepackFile); } catch (Exception ignored) {}
+                        try { Files.deleteIfExists(apepackFile); } catch (Exception ignored) {}
+                    }
                     Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.TitleScreen());
                 }
         ).bounds(centerX + 10, this.height - 40, 150, 20).build());

@@ -42,14 +42,6 @@ public class ApePackV2 {
     // Chunk size for splitting large archives (64MB per chunk)
     public static final long CHUNK_SIZE = 64 * 1024 * 1024;
     
-    // Legacy constants for backward compatibility
-    @Deprecated
-    public static final String COMPRESSION_ZSTD = "zstd";
-    @Deprecated
-    public static final int ZSTD_COMPRESSION_LEVEL = 22;
-    @Deprecated
-    public static final int GZIP_COMPRESSION_LEVEL = 9;
-    
     // File types
     public static final String TYPE_MOD = "mod";
     public static final String TYPE_CONFIG = "config";

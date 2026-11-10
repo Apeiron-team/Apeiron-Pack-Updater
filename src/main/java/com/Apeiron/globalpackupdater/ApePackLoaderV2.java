@@ -13,7 +13,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -221,89 +220,6 @@ public class ApePackLoaderV2 {
             Files.writeString(PROCESSED_HASHES_PATH, array.toString());
         } catch (Exception e) {
             System.err.println("[PackUpdater] Failed to save processed hashes: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * Scans for and installs .apepack files.
-     */
-    public static void scanAndInstall(Path modsDir) {
-        if (!Files.exists(modsDir)) return;
-        
-        Path instanceRoot = modsDir.getParent();
-        if (instanceRoot == null) instanceRoot = Path.of(".");
-        
-        List<Path> apepackFiles = new ArrayList<>();
-        
-        // Scan mods/ directory
-        try (Stream<Path> paths = Files.list(modsDir)) {
-            apepackFiles.addAll(paths
-                    .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
-                    .collect(Collectors.toList()));
-        } catch (IOException e) {
-            System.err.println("[PackUpdater] Error scanning mods directory: " + e.getMessage());
-        }
-        
-        // Scan apepacks/ directory
-        Path apepacksDir = instanceRoot.resolve("apepacks");
-        if (Files.exists(apepacksDir)) {
-            try (Stream<Path> paths = Files.list(apepacksDir)) {
-                List<Path> apepacksFiles = paths
-                        .filter(p -> p.toString().toLowerCase().endsWith(".apepack") || p.toString().toLowerCase().endsWith(".apepack2"))
-                        .sorted(Comparator.comparingLong(p -> {
-                            try { return Files.getLastModifiedTime(p).toMillis(); }
-                            catch (IOException e) { return 0; }
-                        }))
-                        .collect(Collectors.toList());
-                apepackFiles.addAll(apepacksFiles);
-            } catch (IOException e) {
-                System.err.println("[PackUpdater] Error scanning apepacks directory: " + e.getMessage());
-            }
-        }
-        
-        if (apepackFiles.isEmpty()) return;
-        
-        int processedCount = 0;
-        for (Path apepackFile : apepackFiles) {
-            if (isApePackAlreadyProcessed(apepackFile)) {
-                System.out.println("[PackUpdater] Skipping already-processed .apepack: " + apepackFile.getFileName());
-                continue;
-            }
-            
-            System.out.println("[PackUpdater] Found .apepack file: " + apepackFile.getFileName());
-            try {
-                InstallResult result = installApePack(apepackFile, instanceRoot);
-                if (result.success) {
-                    processedCount++;
-                    System.out.println("[PackUpdater] Installed " + result.newFilesInstalled +
-                            " new file(s), skipped " + result.skippedDuplicates +
-                            " duplicate(s), protected " + result.skippedProtected + " user setting(s)");
-                    
-                    if (result.packInfo != null) {
-                        System.out.println("[PackUpdater] Pack: " + result.packInfo.packName +
-                                " v" + result.packInfo.packVersion +
-                                " (MC " + result.packInfo.mcVersion + ")");
-                        System.out.println("[PackUpdater] Format version: " + result.packInfo.formatVersion);
-                    }
-                    
-                    markApePackAsProcessed(apepackFile);
-                    Files.delete(apepackFile);
-                    
-                    if (result.packInfo != null) {
-                        ConfigManager.updateModpackVersion(result.packInfo.packVersion);
-                    }
-                } else {
-                    System.err.println("[PackUpdater] Failed to install " + apepackFile.getFileName() +
-                            ": " + result.errorMessage);
-                }
-            } catch (Exception e) {
-                System.err.println("[PackUpdater] Error processing " + apepackFile.getFileName() +
-                        ": " + e.getMessage());
-            }
-        }
-        
-        if (processedCount > 0) {
-            System.out.println("[PackUpdater] Processed " + processedCount + " new .apepack file(s)");
         }
     }
     
