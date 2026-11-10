@@ -17,7 +17,7 @@ public class ConfigManager {
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.3.1";
+    public static final String CURRENT_VERSION = "1.3.1-1.21.1";
 
     public static void loadConfig() {
         try {

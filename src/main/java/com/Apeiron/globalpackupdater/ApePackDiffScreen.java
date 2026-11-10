@@ -1,7 +1,7 @@
 package com.Apeiron.globalpackupdater;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -303,15 +303,15 @@ public class ApePackDiffScreen extends Screen {
     }
     
     @Override
-    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
         
         int centerX = this.width / 2;
         
         // Title
-        guiGraphics.centeredText(this.font, "Update Comparison", centerX, 8, 0x88CCFF);
+        guiGraphics.drawCenteredString(this.font, "Update Comparison", centerX, 8, 0x88CCFF);
         if (!newPackVersion.isEmpty()) {
-            guiGraphics.centeredText(this.font, currentPackVersion + " -> " + newPackVersion, centerX, 22, 0xCCCCCC);
+            guiGraphics.drawCenteredString(this.font, currentPackVersion + " -> " + newPackVersion, centerX, 22, 0xCCCCCC);
         }
         
         // Highlight active tab
@@ -411,11 +411,11 @@ public class ApePackDiffScreen extends Screen {
         int y = panelTop + 5;
         for (int i = scrollOffset; i < items.size() && y < panelBottom - ROW_HEIGHT; i++) {
             RenderItem item = items.get(i);
-            guiGraphics.centeredText(this.font, item.text, centerX, y, item.color);
+            guiGraphics.drawCenteredString(this.font, item.text, centerX, y, item.color);
             y += ROW_HEIGHT;
         }
         
-        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
     
     private static class RenderItem {

@@ -5,6 +5,22 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 ---
 
 
+## [1.3.1-1.21.1] - NeoForge 1.21.1 Port - 2026-11-10
+
+### Changed
+- **Ported to NeoForge 1.21.1** — Java 25 → 21, NeoForge 26.1.2.122 → 21.1.265, commons-compress 1.27.1 → 1.26.0
+- **API updates** — `GuiGraphicsExtractor` → `GuiGraphics`, `extractRenderState` → `render`, `centeredText` → `drawCenteredString`
+- **Mouse event handlers** — Rewrote from 26.1's `MouseButtonEvent` API to 1.21.1's `mouseClicked(double, double, int)`, `mouseReleased(double, double, int)`, and `mouseDragged(double, double, int, double, double)`
+- **Resize signature** — Fixed `resize(int, int)` → `resize(Minecraft, int, int)` for 1.21.1
+- **Version range** — NeoForge dependency changed from `[26.1.2,)` to `[21.1.0,)`
+
+### Notes
+- This version targets NeoForge 1.21.1 and requires Java 21
+- All features preserved: ApePack v2 generation/loading, preload auto-update, diff screen, file picker, game relauncher, options menu button
+- The 26.1.2 version remains as 1.3.1-26.1.2
+
+---
+
 ## [1.3.1] - Dead Code Cleanup - 2026-11-10
 
 ### Removed
