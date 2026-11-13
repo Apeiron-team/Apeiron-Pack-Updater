@@ -398,6 +398,9 @@ public class ApePackLoaderV2 {
             CompletableFuture.allOf(installFutures.toArray(new CompletableFuture[0])).join();
             installPool.shutdown();
             
+            // Clean up old mod versions that are no longer in the new .apepack
+            cleanupOldModVersions(instanceRoot, entries);
+            
             // Notify completion callback on successful extraction
             if (progress != null) {
                 progress.onComplete(true, null);
@@ -661,6 +664,77 @@ public class ApePackLoaderV2 {
         int bytesRead;
         while ((bytesRead = is.read(buffer)) != -1) {
             os.write(buffer, 0, bytesRead);
+        }
+    }
+    
+    /**
+     * Cleans up old mod versions that are no longer in the new .apepack.
+     * For each mod base name in the new pack, finds all installed mods with the same
+     * base name and removes the ones that are not in the new pack.
+     */
+    private static void cleanupOldModVersions(Path instanceRoot, List<V2ManifestEntry> newEntries) {
+        Path modsDir = instanceRoot.resolve("mods");
+        if (!Files.exists(modsDir) || !Files.isDirectory(modsDir)) {
+            return;
+        }
+        
+        try {
+            // Build a map of base name -> set of exact filenames in the new pack
+            Map<String, Set<String>> newModsByBaseName = new HashMap<>();
+            for (V2ManifestEntry entry : newEntries) {
+                if ("mod".equals(entry.type)) {
+                    String baseName = ApePackLoader.extractModBaseName(entry.name);
+                    newModsByBaseName.computeIfAbsent(baseName, k -> new HashSet<>()).add(entry.name.toLowerCase());
+                }
+            }
+            
+            // Scan installed mods and remove old versions
+            List<Path> installedMods = new ArrayList<>();
+            try (Stream<Path> paths = Files.list(modsDir)) {
+                installedMods = paths
+                        .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
+                        .filter(Files::isRegularFile)
+                        .toList();
+            }
+            
+            int removedCount = 0;
+            for (Path modFile : installedMods) {
+                String fileName = modFile.getFileName().toString();
+                String fileNameLower = fileName.toLowerCase();
+                
+                // Skip packupdater and .apepack files
+                if (fileNameLower.startsWith("packupdater") || fileNameLower.endsWith(".apepack") || fileNameLower.endsWith(".apepack2")) {
+                    continue;
+                }
+                
+                String baseName = ApePackLoader.extractModBaseName(fileName);
+                Set<String> newFilenames = newModsByBaseName.get(baseName);
+                
+                if (newFilenames == null) {
+                    // Mod base name not in new pack at all - don't remove (user may have added it manually)
+                    continue;
+                }
+                
+                // Check if this exact file is in the new pack
+                boolean isNewVersion = newFilenames.contains(fileNameLower);
+                if (!isNewVersion) {
+                    // This is an old version - remove it
+                    try {
+                        Files.delete(modFile);
+                        removedCount++;
+                        System.out.println("[PackUpdater] Removed old mod version: " + fileName);
+                    } catch (IOException e) {
+                        System.err.println("[PackUpdater] Failed to remove old mod: " + fileName + " - " + e.getMessage());
+                    }
+                }
+            }
+            
+            if (removedCount > 0) {
+                System.out.println("[PackUpdater] Cleaned up " + removedCount + " old mod version(s)");
+            }
+            
+        } catch (IOException e) {
+            System.err.println("[PackUpdater] Failed to clean up old mod versions: " + e.getMessage());
         }
     }
 }

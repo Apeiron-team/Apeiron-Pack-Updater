@@ -79,6 +79,16 @@ public class ApePackGeneratorV2 {
     }
     
     /**
+     * Path to the changelog storage file.
+     */
+    private static final Path CHANGELOG_PATH = Paths.get("config", "apepack_changelog.txt");
+    
+    /**
+     * Path to the previous version manifest for changelog comparison.
+     */
+    private static final Path PREV_MANIFEST_PATH = Paths.get("config", "prev_apepack_manifest.json");
+    
+    /**
      * Generates an ApePack v2 file from the current Minecraft instance.
      *
      * @param instanceRoot Root directory of the Minecraft instance
@@ -96,6 +106,11 @@ public class ApePackGeneratorV2 {
                                                       java.util.function.Consumer<String> progressCallback) {
         try {
             System.out.println("[PackUpdater] Starting ApePack v2 generation...");
+            
+            // Auto-set modpack version and name in config
+            ConfigManager.updateModpackVersion(packVersion);
+            ConfigManager.updateModpackName(packName);
+            
             if (progressCallback != null) progressCallback.accept("Scanning mods directory...");
             
             // Collect all files in parallel
@@ -193,6 +208,20 @@ public class ApePackGeneratorV2 {
             System.out.println("[PackUpdater] Collected " + entries.size() + " files: " +
                     modCount + " mods, " + configCount + " configs, " + scriptCount + " scripts, " +
                     resourcePackCount + " resource packs, " + dataPackCount + " data packs");
+            
+            // 5b. Generate changelog by comparing with previous version
+            if (progressCallback != null) progressCallback.accept("Generating changelog...");
+            String changelog = generateChangelog(entries, packVersion);
+            if (changelog != null && !changelog.isEmpty()) {
+                // Save changelog to config folder (excluded from compression)
+                try {
+                    Files.createDirectories(CHANGELOG_PATH.getParent());
+                    Files.writeString(CHANGELOG_PATH, changelog);
+                    System.out.println("[PackUpdater] Changelog saved to: " + CHANGELOG_PATH.toAbsolutePath());
+                } catch (IOException e) {
+                    System.err.println("[PackUpdater] Failed to save changelog: " + e.getMessage());
+                }
+            }
             
             // 6. Compute hashes in parallel
             System.out.println("[PackUpdater] Computing SHA-256 hashes in parallel...");
@@ -705,5 +734,171 @@ public class ApePackGeneratorV2 {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
+    }
+    
+    /**
+     * Generates a changelog by comparing current files with the previous version's manifest.
+     * Saves the current manifest for future comparison.
+     * Returns the changelog text.
+     */
+    private static String generateChangelog(List<FileEntry> entries, String packVersion) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== ").append(packVersion).append(" Changelog ===\n");
+        sb.append("Generated: ").append(new java.util.Date()).append("\n\n");
+        
+        // Load previous manifest
+        Map<String, String> prevMods = new HashMap<>(); // baseName -> version
+        Map<String, String> prevConfigs = new HashMap<>(); // path -> hash
+        if (Files.exists(PREV_MANIFEST_PATH)) {
+            try {
+                String content = Files.readString(PREV_MANIFEST_PATH);
+                JsonObject json = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
+                
+                if (json.has("mods") && json.get("mods").isJsonObject()) {
+                    JsonObject mods = json.get("mods").getAsJsonObject();
+                    for (var entry : mods.entrySet()) {
+                        prevMods.put(entry.getKey(), entry.getValue().getAsString());
+                    }
+                }
+                if (json.has("configs") && json.get("configs").isJsonObject()) {
+                    JsonObject configs = json.get("configs").getAsJsonObject();
+                    for (var entry : configs.entrySet()) {
+                        prevConfigs.put(entry.getKey(), entry.getValue().getAsString());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[PackUpdater] Failed to load previous manifest: " + e.getMessage());
+            }
+        }
+        
+        // Compare mods
+        Set<String> currentModBases = new HashSet<>();
+        List<String> addedMods = new ArrayList<>();
+        List<String> updatedMods = new ArrayList<>();
+        
+        for (FileEntry entry : entries) {
+            if ("mod".equals(entry.type)) {
+                String baseName = ApePackLoader.extractModBaseName(entry.name);
+                currentModBases.add(baseName);
+                String prevVersion = prevMods.get(baseName);
+                if (prevVersion == null) {
+                    addedMods.add(entry.name);
+                } else if (!prevVersion.equals(entry.version)) {
+                    updatedMods.add(entry.name + " (" + prevVersion + " -> " + entry.version + ")");
+                }
+            }
+        }
+        
+        // Find removed mods
+        List<String> removedMods = new ArrayList<>();
+        for (String baseName : prevMods.keySet()) {
+            if (!currentModBases.contains(baseName)) {
+                removedMods.add(baseName);
+            }
+        }
+        
+        // Compare configs
+        Set<String> currentConfigPaths = new HashSet<>();
+        List<String> addedConfigs = new ArrayList<>();
+        List<String> updatedConfigs = new ArrayList<>();
+        
+        for (FileEntry entry : entries) {
+            if ("config".equals(entry.type)) {
+                String path = entry.installPath;
+                currentConfigPaths.add(path);
+                String hash = hashCache.getOrDefault(entry.sourcePath, "");
+                String prevHash = prevConfigs.get(path);
+                if (prevHash == null) {
+                    addedConfigs.add(entry.name);
+                } else if (!prevHash.equals(hash)) {
+                    updatedConfigs.add(entry.name);
+                }
+            }
+        }
+        
+        List<String> removedConfigs = new ArrayList<>();
+        for (String path : prevConfigs.keySet()) {
+            if (!currentConfigPaths.contains(path)) {
+                removedConfigs.add(path);
+            }
+        }
+        
+        // Write changelog
+        if (!addedMods.isEmpty()) {
+            sb.append("Added Mods (").append(addedMods.size()).append("):\n");
+            for (String mod : addedMods) sb.append("  + ").append(mod).append("\n");
+            sb.append("\n");
+        }
+        if (!updatedMods.isEmpty()) {
+            sb.append("Updated Mods (").append(updatedMods.size()).append("):\n");
+            for (String mod : updatedMods) sb.append("  ~ ").append(mod).append("\n");
+            sb.append("\n");
+        }
+        if (!removedMods.isEmpty()) {
+            sb.append("Removed Mods (").append(removedMods.size()).append("):\n");
+            for (String mod : removedMods) sb.append("  - ").append(mod).append("\n");
+            sb.append("\n");
+        }
+        if (!addedConfigs.isEmpty()) {
+            sb.append("Added Configs (").append(addedConfigs.size()).append("):\n");
+            for (String cfg : addedConfigs) sb.append("  + ").append(cfg).append("\n");
+            sb.append("\n");
+        }
+        if (!updatedConfigs.isEmpty()) {
+            sb.append("Updated Configs (").append(updatedConfigs.size()).append("):\n");
+            for (String cfg : updatedConfigs) sb.append("  ~ ").append(cfg).append("\n");
+            sb.append("\n");
+        }
+        if (!removedConfigs.isEmpty()) {
+            sb.append("Removed Configs (").append(removedConfigs.size()).append("):\n");
+            for (String cfg : removedConfigs) sb.append("  - ").append(cfg).append("\n");
+            sb.append("\n");
+        }
+        
+        if (addedMods.isEmpty() && updatedMods.isEmpty() && removedMods.isEmpty() &&
+            addedConfigs.isEmpty() && updatedConfigs.isEmpty() && removedConfigs.isEmpty()) {
+            sb.append("No changes detected from previous version.\n");
+        }
+        
+        // Save current manifest for next comparison
+        saveCurrentManifest(entries);
+        
+        return sb.toString();
+    }
+    
+    /**
+     * Helper to get hash from the hash cache (used in changelog generation).
+     */
+    private static Map<Path, String> hashCache = new ConcurrentHashMap<>();
+    
+    /**
+     * Saves the current manifest for future changelog comparison.
+     */
+    private static void saveCurrentManifest(List<FileEntry> entries) {
+        try {
+            JsonObject json = new JsonObject();
+            JsonObject mods = new JsonObject();
+            JsonObject configs = new JsonObject();
+            
+            for (FileEntry entry : entries) {
+                if ("mod".equals(entry.type)) {
+                    String baseName = ApePackLoader.extractModBaseName(entry.name);
+                    mods.addProperty(baseName, entry.version);
+                } else if ("config".equals(entry.type)) {
+                    String hash = computeSha256(entry.sourcePath);
+                    configs.addProperty(entry.installPath, hash != null ? hash : "");
+                }
+            }
+            
+            json.add("mods", mods);
+            json.add("configs", configs);
+            json.addProperty("version", ConfigManager.modpackVersion);
+            json.addProperty("timestamp", new java.util.Date().toString());
+            
+            Files.createDirectories(PREV_MANIFEST_PATH.getParent());
+            Files.writeString(PREV_MANIFEST_PATH, json.toString());
+        } catch (IOException e) {
+            System.err.println("[PackUpdater] Failed to save current manifest: " + e.getMessage());
+        }
     }
 }

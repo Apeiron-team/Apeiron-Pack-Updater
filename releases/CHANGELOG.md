@@ -5,6 +5,77 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 ---
 
 
+## [1.3.11-26.1.2] - Config Screen Tab Reorganization - 2026-11-13
+
+### Changed
+- **Config screen reorganized** — Restructured from 3 tabs (Apepacks, Generate, Settings) to 3 clean tabs (Info, Apepacks, Settings)
+- **New Info tab** — Shows modpack name, modpack version, mod version, "Check for Update" button, and "View Changelog" button that fetches release notes from GitHub
+- **New Apepacks tab** — Merged Generate tab content with Open Apepacks and Browse buttons: pack name field, pack version field, generate button, open apepacks folder button, and browse .apepack button — all in one place
+- **Settings tab cleaned** — Removed duplicate pack version display; kept repo, token, channel, self-update, and save settings
+- **Changelog feature** — Info tab can load and display the last 5 GitHub release notes with scroll support
+- **Removed old Apepacks file list** — The downloaded .apepack file list with scroll was removed from the config screen since .apepack files are auto-extracted and deleted on startup
+
+### Changed
+- **PackUpdaterConfigScreen.java** — Complete tab reorganization: new `buildInfoTab()`, `renderInfoTab()`, `loadChangelog()` methods; merged Generate into Apepacks tab; updated `TabId` enum, tab buttons, render switch, and mouse scroll handler
+- **build.gradle** — Version bumped to `1.3.11-26.1.2`
+- **ConfigManager.java** — `CURRENT_VERSION` synced to `1.3.11-26.1.2`
+
+---
+
+
+## [1.3.10-26.1.2] - Config Screen Render Fix - 2026-11-13
+
+### Fixed
+- **Gray config screen bug** — Config screen was completely gray because the opaque background was drawn after widget rendering, covering all buttons, text fields, and tab content. Fixed by drawing the background before `super.extractRenderState()` so widgets render on top
+
+### Changed
+- **PackUpdaterConfigScreen.java** — Render order fixed in `extractRenderState()`: background fill draws first, then `super.extractRenderState()` renders widgets on top
+- **build.gradle** — Version bumped to `1.3.10-26.1.2`
+- **ConfigManager.java** — `CURRENT_VERSION` synced to `1.3.10-26.1.2`
+
+---
+
+
+## [1.3.9-26.1.2] - Mod Self-Update Feature - 2026-11-13
+
+### Added
+- **Mod self-update system** — New opt-in feature in the Settings tab lets the player enable automatic PackUpdater mod self-updates. When enabled, a "Check for Mod Update" button appears that queries GitHub for the latest release, downloads the new JAR, replaces all old PackUpdater JARs in the mods/ folder, and deletes the old versions automatically
+- **Self-update toggle** — "Self-update: ON/OFF" button in Settings tab. Disabled by default — the player must explicitly enable it. The preference persists across sessions
+- **Download progress display** — Progress bar and status text shown in the Settings tab during mod update download
+- **Version comparison** — Smart version comparison that handles the MC version suffix (e.g., "1.3.9-26.1.2" vs "1.3.8-26.1.2")
+- **Old JAR cleanup** — All existing PackUpdater JARs are automatically removed when a new version is installed, preventing duplicate mod conflicts
+
+### Changed
+- **ConfigManager.java** — Added `selfUpdateEnabled` boolean field with load/save support
+- **PackUpdaterConfigScreen.java** — Added self-update toggle, check button, progress display, `handleCheckForModUpdate()` method, and `compareVersions()` helper
+- **build.gradle** — Version bumped to `1.3.9-26.1.2`
+- **ConfigManager.java** — `CURRENT_VERSION` synced to `1.3.9-26.1.2`
+
+---
+
+
+## [1.3.8-26.1.2] - Bug Fixes and New Features - 2026-11-13
+
+### Fixed
+- **Player data loss on restart** — Game relauncher now reads the current player's session data (username, UUID, access token, session ID) and passes them to the new JVM process, so your account is preserved after restart
+- **Default instance loads wrong modpack** — Relauncher now reads the instance name from `minecraftinstance.json` and passes it as `${instance_name}` so the correct CurseForge instance loads
+- **Old mod versions not cleaned up** — After installing an .apepack, old mod JARs that are no longer in the new pack are automatically removed (e.g., v1.1.7 mods are deleted when updating to v1.1.8)
+
+### Added
+- **Changelog mechanism** — When generating an .apepack, the mod compares against the previous version's manifest and generates a changelog (`config/apepack_changelog.txt`) showing added/updated/removed mods and configs. The changelog is excluded from compression.
+- **Auto-set modpack version** — Generating an .apepack now automatically sets the modpack version and name in the PackUpdater config, so you don't have to manually update them
+- **Version naming with game version** — All JARs now include the Minecraft version in their name (e.g., `packupdater-1.3.8-26.1.2.jar`) to distinguish between different MC version builds
+
+### Changed
+- **GameRelauncher.java** — Added `Minecraft` and `Session` imports; `resolveGameVariable()` now reads player session data; added `readInstanceName()` method
+- **ApePackLoaderV2.java** — Added `cleanupOldModVersions()` method that removes old mod versions after installation
+- **ApePackGeneratorV2.java** — Added changelog generation with `generateChangelog()` and `saveCurrentManifest()` methods; auto-sets `ConfigManager.modpackVersion` and `modpackName` on generation
+- **ConfigManager.java** — Version bumped to `1.3.8-26.1.2`
+- **build.gradle** — Version bumped to `1.3.8-26.1.2`
+
+---
+
+
 ## [1.3.7] - Bug Fixes for NeoForge 26.1.2 - 2026-11-13
 
 ### Fixed

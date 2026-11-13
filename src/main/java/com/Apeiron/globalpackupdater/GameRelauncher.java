@@ -636,11 +636,82 @@ public class GameRelauncher {
 
     /**
      * Resolves variables in game arguments.
+     * Reads the current player's session data to preserve their account on relaunch.
      */
     private static String resolveGameVariable(String arg, Path instanceRoot, String neoForgeVersion) {
         String librariesDir = INSTALL_DIR.resolve("libraries").toString().replace("\\", "/");
         String gameDir = instanceRoot.toString().replace("\\", "/");
-        String userName = "Player"; // Offline mode username
+
+        // Read player session data from launcher_profiles.json
+        String userName = "Player";
+        String authSession = "";
+        String authAccessToken = "";
+        String userType = "msa";
+        String authUuid = "00000000-0000-0000-0000-000000000000";
+        String authXuid = "";
+
+        try {
+            // Try to read from launcher_profiles.json in .minecraft directory
+            Path profilesPath = INSTALL_DIR.resolve("launcher_profiles.json");
+            if (Files.exists(profilesPath)) {
+                JsonObject profiles = parseJson(profilesPath);
+
+                // Get the selected profile
+                String selectedProfile = null;
+                if (profiles.has("clientToken")) {
+                    authAccessToken = profiles.get("clientToken").getAsString();
+                }
+
+                // Find the selected server/instance profile
+                if (profiles.has("userProfiles") && profiles.get("userProfiles").isJsonObject()) {
+                    JsonObject userProfiles = profiles.get("userProfiles").getAsJsonObject();
+                    if (userProfiles.has("microsoft") && userProfiles.get("microsoft").isJsonArray()) {
+                        JsonArray microsoftProfiles = userProfiles.get("microsoft").getAsJsonArray();
+                        if (!microsoftProfiles.isEmpty()) {
+                            // Get the first (active) Microsoft profile
+                            JsonObject profile = microsoftProfiles.get(0).getAsJsonObject();
+                            if (profile.has("name")) {
+                                userName = profile.get("name").getAsString();
+                            }
+                            if (profile.has("uuid")) {
+                                authUuid = profile.get("uuid").getAsString();
+                            }
+                            if (profile.has("authenticationToken")) {
+                                authAccessToken = profile.get("authenticationToken").getAsString();
+                            }
+                            if (profile.has("authToken")) {
+                                authAccessToken = profile.get("authToken").getAsString();
+                            }
+                            userType = "msa";
+                        }
+                    }
+                    // Also check offline profiles
+                    if (userProfiles.has("offline") && userProfiles.get("offline").isJsonArray()) {
+                        JsonArray offlineProfiles = userProfiles.get("offline").getAsJsonArray();
+                        if (!offlineProfiles.isEmpty() && "Player".equals(userName)) {
+                            JsonObject profile = offlineProfiles.get(0).getAsJsonObject();
+                            if (profile.has("name")) {
+                                userName = profile.get("name").getAsString();
+                            }
+                            if (profile.has("uuid")) {
+                                authUuid = profile.get("uuid").getAsString();
+                            }
+                            userType = "offline";
+                        }
+                    }
+                }
+
+                // Read selectedServer from client data
+                if (profiles.has("clientData") && profiles.get("clientData").isJsonObject()) {
+                    JsonObject clientData = profiles.get("clientData").getAsJsonObject();
+                    if (clientData.has("selectedServer")) {
+                        selectedProfile = clientData.get("selectedServer").getAsString();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[PackUpdater] Could not read session data, using offline mode: " + e.getMessage());
+        }
 
         // Read the correct assets index from the base Minecraft version JSON
         String assetsIndex = "30"; // Default for MC 26.1.2
@@ -654,22 +725,50 @@ public class GameRelauncher {
             }
         } catch (Exception ignored) {}
 
+        // Read instance name from minecraftinstance.json for the correct instance
+        String instanceName = readInstanceName(instanceRoot);
+
         return arg
                 .replace("${auth_player_name}", userName)
-                .replace("${auth_session}", "")
-                .replace("${auth_access_token}", "")
-                .replace("${user_type}", "msa")
+                .replace("${auth_session}", authSession)
+                .replace("${auth_access_token}", authAccessToken)
+                .replace("${user_type}", userType)
                 .replace("${version_name}", neoForgeVersion)
                 .replace("${version_type}", "modded")
                 .replace("${game_directory}", gameDir)
                 .replace("${assets_root}", INSTALL_DIR.resolve("assets").toString().replace("\\", "/"))
                 .replace("${assets_index_name}", assetsIndex)
-                .replace("${auth_uuid}", "00000000-0000-0000-0000-000000000000")
-                .replace("${auth_xuid}", "")
+                .replace("${auth_uuid}", authUuid)
+                .replace("${auth_xuid}", authXuid)
                 .replace("${user_properties}", "{}")
                 .replace("${clientid}", "")
                 .replace("${library_directory}", librariesDir)
-                .replace("${version}", neoForgeVersion);
+                .replace("${version}", neoForgeVersion)
+                .replace("${instance_name}", instanceName != null ? instanceName : "");
+    }
+
+    /**
+     * Reads the instance name from minecraftinstance.json.
+     * This ensures the relauncher loads the correct CurseForge instance.
+     */
+    private static String readInstanceName(Path instanceRoot) {
+        try {
+            Path instanceConfig = instanceRoot.resolve("minecraftinstance.json");
+            if (!Files.exists(instanceConfig)) {
+                instanceConfig = instanceRoot.resolve("..").resolve("minecraftinstance.json");
+            }
+            if (Files.exists(instanceConfig)) {
+                JsonObject config = parseJson(instanceConfig);
+                if (config.has("name") && config.get("name").isJsonPrimitive()) {
+                    String name = config.get("name").getAsString();
+                    System.out.println("[PackUpdater] Instance name: " + name);
+                    return name;
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[PackUpdater] Could not read instance name: " + e.getMessage());
+        }
+        return null;
     }
 
     /**

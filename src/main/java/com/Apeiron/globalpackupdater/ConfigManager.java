@@ -15,9 +15,10 @@ public class ConfigManager {
     public static String modpackVersion = "v0.0"; // Default modpack version
     public static String modpackName = ""; // Modpack name (set from .apepack)
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
+    public static boolean selfUpdateEnabled = false; // Opt-in mod self-update toggle
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.3.7";
+    public static final String CURRENT_VERSION = "1.3.11-26.1.2";
 
     public static void loadConfig() {
         try {
@@ -29,6 +30,7 @@ public class ConfigManager {
                 if (json.has("modpackVersion")) modpackVersion = json.get("modpackVersion").getAsString();
                 if (json.has("modpackName")) modpackName = json.get("modpackName").getAsString();
                 if (json.has("githubToken")) githubToken = json.get("githubToken").getAsString();
+                if (json.has("selfUpdateEnabled")) selfUpdateEnabled = json.get("selfUpdateEnabled").getAsBoolean();
             } else {
                 saveConfig();
             }
@@ -50,6 +52,7 @@ public class ConfigManager {
             if (!githubToken.isEmpty()) {
                 json.addProperty("githubToken", githubToken);
             }
+            json.addProperty("selfUpdateEnabled", selfUpdateEnabled);
             Files.writeString(CONFIG_PATH, json.toString());
         } catch (Exception e) {
             System.err.println("[PackUpdater] Failed to save config.");
