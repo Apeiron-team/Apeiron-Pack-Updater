@@ -165,6 +165,12 @@ public class PackUpdaterMod {
      */
     private Path checkAndDownloadUpdate() {
         try {
+            // Skip GitHub check if no repo is configured
+            if (ConfigManager.repo == null || ConfigManager.repo.isEmpty()) {
+                System.out.println("[PackUpdater] No GitHub repo configured, skipping update check.");
+                return null;
+            }
+
             System.out.println("[PackUpdater] Checking GitHub for updates...");
 
             String localVersion = ConfigManager.modpackVersion;

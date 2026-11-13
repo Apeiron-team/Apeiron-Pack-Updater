@@ -1,10 +1,11 @@
 package com.Apeiron.globalpackupdater;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.io.File;
@@ -130,7 +131,7 @@ public class ApePackFilePicker extends Screen {
 
         // Back button
         this.addRenderableWidget(Button.builder(
-                Component.literal("Ã¢â€ Â Back"),
+                Component.literal("← Back"),
                 button -> {
                     if (this.currentDir.getParentFile() != null) {
                         this.currentDir = this.currentDir.getParentFile();
@@ -142,7 +143,7 @@ public class ApePackFilePicker extends Screen {
 
         // Up button (go to parent)
         this.addRenderableWidget(Button.builder(
-                Component.literal("Ã¢â€ â€˜ Up"),
+                Component.literal("↑ Up"),
                 button -> {
                     if (this.currentDir.getParentFile() != null) {
                         this.currentDir = this.currentDir.getParentFile();
@@ -313,7 +314,7 @@ public class ApePackFilePicker extends Screen {
             int y = this.panelTop + (i * ROW_HEIGHT) - (this.scrollOffset % ROW_HEIGHT);
 
             // Only clamp if truly out of bounds (shouldn't happen with correct scrollOffset clamping)
-            // but keep as safety net Ã¢â‚¬â€ use soft clamping that doesn't affect normal scrolling
+            // but keep as safety net — use soft clamping that doesn't affect normal scrolling
             if (y < this.panelTop) y = this.panelTop;
             if (y > this.panelTop + this.panelHeight - ROW_HEIGHT) y = this.panelTop + this.panelHeight - ROW_HEIGHT;
 
@@ -359,9 +360,11 @@ public class ApePackFilePicker extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Check if clicking on the scrollbar (left button = 0)
-        if (button == 0) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        // Check if clicking on the scrollbar
+        if (event.buttonInfo().isLeft()) {
+            double mouseX = event.x();
+            double mouseY = event.y();
             int totalContentHeight = this.files.size() * ROW_HEIGHT;
             if (totalContentHeight > this.panelHeight) {
                 int maxScroll = totalContentHeight - this.panelHeight;
@@ -378,49 +381,49 @@ public class ApePackFilePicker extends Screen {
                 }
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0 && draggingScrollbar) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        if (event.buttonInfo().isLeft() && draggingScrollbar) {
             draggingScrollbar = false;
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return super.mouseReleased(event);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (button == 0 && draggingScrollbar) {
+    public void mouseMoved(double mouseX, double mouseY) {
+        if (draggingScrollbar) {
             int totalContentHeight = this.files.size() * ROW_HEIGHT;
             int maxScroll = totalContentHeight - this.panelHeight;
             int scrollbarHeight = Math.max(20, (this.panelHeight * this.panelHeight) / totalContentHeight);
             int panelUsableHeight = this.panelHeight - scrollbarHeight;
 
-            int scrollDelta = (int)((-deltaY * maxScroll) / panelUsableHeight);
+            int deltaY = (int) mouseY - dragStartY;
+            int scrollDelta = (int)((deltaY * maxScroll) / panelUsableHeight);
 
             this.scrollOffset = Math.max(0, Math.min(dragScrollOffset + scrollDelta, maxScroll));
             refreshFileButtons();
-            return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        super.mouseMoved(mouseX, mouseY);
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Bug 10: Fixed background rendering - use semi-transparent dark background
         guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
 
         // Title
-        guiGraphics.drawCenteredString(this.font, "Select .apepack or .apepack2 File", this.width / 2, 8, 0x88CCFF);
+        guiGraphics.centeredText(this.font, "Select .apepack or .apepack2 File", this.width / 2, 8, 0x88CCFF);
 
         // Current directory label
-        guiGraphics.drawCenteredString(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
+        guiGraphics.centeredText(this.font, "Current: " + this.currentDir.getName(), this.width / 2, this.panelTop - 5, 0xAAAAAA);
         
         // Search filter indicator
         if (!this.searchQuery.isEmpty()) {
-            guiGraphics.drawCenteredString(this.font, "Filtering: " + this.searchQuery + " (" + this.files.size() + " results)", this.width / 2, this.panelTop - 20, 0x55FF55);
+            guiGraphics.centeredText(this.font, "Filtering: " + this.searchQuery + " (" + this.files.size() + " results)", this.width / 2, this.panelTop - 20, 0x55FF55);
         }
 
         // Draw panel background
@@ -492,15 +495,15 @@ public class ApePackFilePicker extends Screen {
 
         // Selected file indicator
         if (this.selectedFile != null) {
-            guiGraphics.drawCenteredString(this.font, "Selected: " + this.selectedFile.getName(), this.width / 2, this.height - 55, 0x55FF55);
+            guiGraphics.centeredText(this.font, "Selected: " + this.selectedFile.getName(), this.width / 2, this.height - 55, 0x55FF55);
         } else {
-            guiGraphics.drawCenteredString(this.font, "No file selected", this.width / 2, this.height - 55, 0x888888);
+            guiGraphics.centeredText(this.font, "No file selected", this.width / 2, this.height - 55, 0x888888);
         }
 
         // Instructions
-        guiGraphics.drawCenteredString(this.font, "Click folder to open, click .apepack/.apepack2 to select, use search to filter", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
+        guiGraphics.centeredText(this.font, "Click folder to open, click .apepack/.apepack2 to select, use search to filter", this.width / 2, this.panelTop + this.panelHeight + 12, 0x777777);
 
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     @Override

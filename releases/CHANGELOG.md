@@ -5,21 +5,24 @@ All notable changes to the Apeiron PackUpdater mod will be documented in this fi
 ---
 
 
-## [1.3.1-1.21.1] - NeoForge 1.21.1 Port - 2026-11-10
+## [1.3.7] - Bug Fixes for NeoForge 26.1.2 - 2026-11-13
+
+### Fixed
+- **Downloaded unrelated modpack** — Default GitHub repo was hardcoded to `Apeiron-team/Apeiron-Vanilla-plus-v1`, causing the mod to download the wrong modpack in other instances. Default repo is now empty — user must configure the correct modpack repo in Settings tab
+- **Config screen buttons** — "Check for Update" and "Download Update" now show a toast notification when no repo is configured instead of making a broken API request
+- **Blurry background text** — Config screen background changed from semi-transparent to fully opaque so parent screen content doesn't show through as blur
+- **Blurry toast notifications** — Toast notifications now use fully opaque colors for crisp, clear text
 
 ### Changed
-- **Ported to NeoForge 1.21.1** — Java 25 → 21, NeoForge 26.1.2.122 → 21.1.265, commons-compress 1.27.1 → 1.26.0
-- **API updates** — `GuiGraphicsExtractor` → `GuiGraphics`, `extractRenderState` → `render`, `centeredText` → `drawCenteredString`
-- **Mouse event handlers** — Rewrote from 26.1's `MouseButtonEvent` API to 1.21.1's `mouseClicked(double, double, int)`, `mouseReleased(double, double, int)`, and `mouseDragged(double, double, int, double, double)`
-- **Resize signature** — Fixed `resize(int, int)` → `resize(Minecraft, int, int)` for 1.21.1
-- **Version range** — NeoForge dependency changed from `[26.1.2,)` to `[21.1.0,)`
+- **ConfigManager.java** — Default `repo` changed from `"Apeiron-team/Apeiron-Vanilla-plus-v1"` to `""` (empty)
+- **PackUpdaterMod.java** — `checkAndDownloadUpdate()` now skips the GitHub check if `repo` is empty
+- **PackUpdaterConfigScreen.java** — Opaque background (`0xFF101010`), `super.extractRenderState()` moved to the start of render method
 
 ### Notes
-- This version targets NeoForge 1.21.1 and requires Java 21
-- All features preserved: ApePack v2 generation/loading, preload auto-update, diff screen, file picker, game relauncher, options menu button
-- The 26.1.2 version remains as 1.3.1-26.1.2
+- This version targets NeoForge 26.1.2 and requires Java 25
 
 ---
+
 
 ## [1.3.1] - Dead Code Cleanup - 2026-11-10
 

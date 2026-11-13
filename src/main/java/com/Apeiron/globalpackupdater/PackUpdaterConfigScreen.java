@@ -5,7 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -241,14 +241,14 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     @Override
-    public void resize(net.minecraft.client.Minecraft minecraft, int width, int height) {
+    public void resize(int width, int height) {
         // Save state
         String repoValue = repoField != null ? repoField.getValue() : "";
         String tokenValue = tokenField != null ? tokenField.getValue() : "";
         String packNameValue = packNameField != null ? packNameField.getValue() : "";
         String packVersionValue = packVersionField != null ? packVersionField.getValue() : "";
         
-        super.resize(minecraft, width, height);
+        super.resize(width, height);
         
         // Restore state after rebuild
         Minecraft.getInstance().execute(() -> {
@@ -640,6 +640,10 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     private void handleCheckForPackUpdate() {
+        if (ConfigManager.repo == null || ConfigManager.repo.isEmpty()) {
+            showToast("No GitHub repo configured. Set your modpack repo in Settings tab.");
+            return;
+        }
         if (checkingUpdate) {
             showToast("Already checking for updates");
             return;
@@ -701,6 +705,10 @@ public class PackUpdaterConfigScreen extends Screen {
     }
 
     private void handleDownloadPackUpdate() {
+        if (ConfigManager.repo == null || ConfigManager.repo.isEmpty()) {
+            showToast("No GitHub repo configured. Set your modpack repo in Settings tab.");
+            return;
+        }
         if (downloading && !downloadPaused) {
             showToast("Download already in progress");
             return;
@@ -1004,7 +1012,7 @@ public class PackUpdaterConfigScreen extends Screen {
         }
     }
 
-    private void renderApepacksTab(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+    private void renderApepacksTab(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY) {
         int centerX = this.width / 2;
         int panelWidth = 340;
         int panelX = centerX - panelWidth / 2;
@@ -1013,9 +1021,9 @@ public class PackUpdaterConfigScreen extends Screen {
 
         // Show install error message
         if (installError != null) {
-            guiGraphics.drawCenteredString(font, "Installation Failed!", centerX, startY + 10, 0xFF5555);
-            guiGraphics.drawCenteredString(font, "The .apepack update failed to install.", centerX, startY + 30, 0xCCCCCC);
-            guiGraphics.drawCenteredString(font, "Please check latest.log and report the bug on GitHub.", centerX, startY + 48, 0xAAAAAA);
+            guiGraphics.centeredText(font, "Installation Failed!", centerX, startY + 10, 0xFF5555);
+            guiGraphics.centeredText(font, "The .apepack update failed to install.", centerX, startY + 30, 0xCCCCCC);
+            guiGraphics.centeredText(font, "Please check latest.log and report the bug on GitHub.", centerX, startY + 48, 0xAAAAAA);
             startY += 70;
         }
 
@@ -1041,23 +1049,23 @@ public class PackUpdaterConfigScreen extends Screen {
             }
             
             // Status text
-            guiGraphics.drawCenteredString(font, downloadStatus, centerX, barY + barH + 8, 0xFFFFFF);
+            guiGraphics.centeredText(font, downloadStatus, centerX, barY + barH + 8, 0xFFFFFF);
             
             // Statistics
             if (!statsText.isEmpty()) {
-                guiGraphics.drawCenteredString(font, statsText, centerX, barY + barH + 22, 0xAAAAAA);
+                guiGraphics.centeredText(font, statsText, centerX, barY + barH + 22, 0xAAAAAA);
             }
             
             startY += barH + 35;
         }
 
         if (installError == null) {
-            guiGraphics.drawCenteredString(font, "Downloaded .apepack Files", centerX, startY + 10, 0x88CCFF);
+            guiGraphics.centeredText(font, "Downloaded .apepack Files", centerX, startY + 10, 0x88CCFF);
         }
 
         if (apepackFiles.isEmpty() && installError == null) {
-            guiGraphics.drawCenteredString(font, "No .apepack files found", centerX, startY + 40, 0x666666);
-            guiGraphics.drawCenteredString(font, "Updates will be saved here", centerX, startY + 58, 0x444444);
+            guiGraphics.centeredText(font, "No .apepack files found", centerX, startY + 40, 0x666666);
+            guiGraphics.centeredText(font, "Updates will be saved here", centerX, startY + 58, 0x444444);
             return;
         }
 
@@ -1085,16 +1093,16 @@ public class PackUpdaterConfigScreen extends Screen {
             String name = info.path.getFileName().toString();
             if (name.length() > 35) name = "..." + name.substring(name.length() - 32);
             String prefix = info.processed ? "[OK] " : "[  ] ";
-            guiGraphics.drawCenteredString(font, prefix + name, panelX + 80, y + 3, info.processed ? 0x888888 : 0xFFFFFF);
+            guiGraphics.centeredText(font, prefix + name, panelX + 80, y + 3, info.processed ? 0x888888 : 0xFFFFFF);
 
             // Version and size
             String sizeStr = formatSize(info.size);
-            guiGraphics.drawCenteredString(font, "v" + info.version + " (" + sizeStr + ")", panelX + panelWidth - 80, y + 3, 0xAAAAAA);
+            guiGraphics.centeredText(font, "v" + info.version + " (" + sizeStr + ")", panelX + panelWidth - 80, y + 3, 0xAAAAAA);
         }
 
         // Instructions
         if (installError == null) {
-            guiGraphics.drawCenteredString(font, "Click 'Browse .apepack' to install a file manually", centerX, this.height - 15, 0x555555);
+            guiGraphics.centeredText(font, "Click 'Browse .apepack' to install a file manually", centerX, this.height - 15, 0x555555);
         }
     }
 
@@ -1233,12 +1241,12 @@ public class PackUpdaterConfigScreen extends Screen {
         });
     }
 
-    private void renderGenerateTab(GuiGraphics guiGraphics) {
+    private void renderGenerateTab(GuiGraphicsExtractor guiGraphics) {
         int centerX = this.width / 2;
         
         // Info text
-        guiGraphics.drawCenteredString(font, "Create an .apepack2 from your current instance", centerX, 50, 0x88CCFF);
-        guiGraphics.drawCenteredString(font, "Includes mods, configs, and KubeJS scripts", centerX, 67, 0x666666);
+        guiGraphics.centeredText(font, "Create an .apepack2 from your current instance", centerX, 50, 0x88CCFF);
+        guiGraphics.centeredText(font, "Includes mods, configs, and KubeJS scripts", centerX, 67, 0x666666);
 
         // Status
         if (statusText.getString() != null && !statusText.getString().isEmpty()) {
@@ -1246,7 +1254,7 @@ public class PackUpdaterConfigScreen extends Screen {
             String msg = statusText.getString();
             if (msg.contains("generated") || msg.contains("mods")) color = 0x55FF55;
             else if (msg.contains("Error") || msg.contains("failed")) color = 0xFF5555;
-            guiGraphics.drawCenteredString(font, msg, centerX, 130, color);
+            guiGraphics.centeredText(font, msg, centerX, 130, color);
         }
     }
 
@@ -1311,14 +1319,14 @@ public class PackUpdaterConfigScreen extends Screen {
         ).bounds(panelX + 20, startY + 160, panelWidth - 40, 20).build());
     }
 
-    private void renderSettingsTab(GuiGraphics guiGraphics) {
+    private void renderSettingsTab(GuiGraphicsExtractor guiGraphics) {
         int centerX = this.width / 2;
         
         // Info text
-        guiGraphics.drawCenteredString(font, "Configure update source and preferences", centerX, 50, 0x88CCFF);
+        guiGraphics.centeredText(font, "Configure update source and preferences", centerX, 50, 0x88CCFF);
 
         // Token info
-        guiGraphics.drawCenteredString(font, "Get a token at: https://github.com/settings/tokens", centerX, 170, 0x444444);
+        guiGraphics.centeredText(font, "Get a token at: https://github.com/settings/tokens", centerX, 170, 0x444444);
     }
 
     // ==================== DATA CLASS ====================
@@ -1358,12 +1366,15 @@ public class PackUpdaterConfigScreen extends Screen {
     // ==================== RENDER ====================
 
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Background
-        guiGraphics.fill(0, 0, this.width, this.height, 0xCC101010);
+    public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Render widgets first so they appear on top of the background
+        super.extractRenderState(guiGraphics, mouseX, mouseY, partialTick);
+
+        // Opaque background to prevent parent screen from showing through as blur
+        guiGraphics.fill(0, 0, this.width, this.height, 0xFF101010);
 
         // Title
-        guiGraphics.drawCenteredString(this.font, "Apeiron Pack Updater", this.width / 2, 8, 0x88CCFF);
+        guiGraphics.centeredText(this.font, "Apeiron Pack Updater", this.width / 2, 8, 0x88CCFF);
 
         // Draw active tab highlight
         int tabBarY = 25;
@@ -1406,11 +1417,9 @@ public class PackUpdaterConfigScreen extends Screen {
                 guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY + 16, (alpha << 24) | 0x1A1A2E);
                 guiGraphics.fill(toastX - 2, toastY - 2, toastX + toastWidth + 2, toastY - 1, (alpha << 24) | 0x4466AA);
                 guiGraphics.fill(toastX - 2, toastY + 15, toastX + toastWidth + 2, toastY + 16, (alpha << 24) | 0x333355);
-                guiGraphics.drawCenteredString(font, toastMessage, width / 2, toastY + 2, (alpha << 24) | 0xFFFFFF);
+                guiGraphics.centeredText(font, toastMessage, width / 2, toastY + 2, (alpha << 24) | 0xFFFFFF);
             }
         }
-
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     @Override

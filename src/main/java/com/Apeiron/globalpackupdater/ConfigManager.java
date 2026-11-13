@@ -10,14 +10,14 @@ import java.nio.file.Paths;
 public class ConfigManager {
     private static final Path CONFIG_PATH = Paths.get("config", "globalpackupdater.json");
 
-    public static String repo = "Apeiron-team/Apeiron-Vanilla-plus-v1"; // Default to the modpack repo
+    public static String repo = ""; // Empty by default — user must set the correct modpack repo
     public static String channel = "stable"; // stable, beta, nightly
     public static String modpackVersion = "v0.0"; // Default modpack version
     public static String modpackName = ""; // Modpack name (set from .apepack)
     public static String githubToken = ""; // Optional GitHub personal access token for higher API rate limits
     
     // Current mod version - synced from build.gradle
-    public static final String CURRENT_VERSION = "1.3.1-1.21.1";
+    public static final String CURRENT_VERSION = "1.3.7";
 
     public static void loadConfig() {
         try {
